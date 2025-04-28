@@ -1,0 +1,8 @@
+Iteration 2: Raw LLM response length: 10653
+[Eval] Start Evalulation! on device: 0
+[Eval] Loading Original Model
+[Eval] Original Model Loaded
+[Eval] Loading and Compiling New Model with Custom CUDA Kernel
+Syntax Error in custom generated code or Compilation Error invalid decimal literal (<string>, line 14)
+Iteration 2: Compilation failed with error: 'NoneType' object is not callable
+

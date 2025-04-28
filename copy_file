@@ -1,0 +1,34 @@
+ILD_ABI=\"_cxxabi1011\" -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/torch/csrc/api/include -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/TH -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/THC -isystem /opt/apps/cuda/12.2/include -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/include/python3.10 -D_GLIBCXX_USE_CXX11_ABI=0 -fPIC -std=c++17 -c /home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/main.cpp -o main.o 
+In file included from /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/pybind11/attr.h:13,
+                 from /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/pybind11/detail/class.h:12,
+                 from /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/pybind11/pybind11.h:13,
+                 from /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/torch/csrc/Exceptions.h:12,
+                 from /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/torch/csrc/api/include/torch/python.h:11,
+                 from /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/torch/extension.h:9,
+                 from /home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/main.cpp:1:
+/home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/main.cpp:16:1: error: redefinition of ‘pybind11::module_::module_def pybind11_module_def_layernorm’
+   16 | PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+      | ^~~~~~~~~~~~~~~
+/home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/main.cpp:12:1: note: ‘pybind11::module_::module_def pybind11_module_def_layernorm’ previously declared here
+   12 | PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+      | ^~~~~~~~~~~~~~~
+/home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/main.cpp:16:1: error: redefinition of ‘PyObject* PyInit_layernorm()’
+   16 | PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+      | ^~~~~~~~~~~~~~~
+/home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/main.cpp:12:1: note: ‘PyObject* PyInit_layernorm()’ previously defined here
+   12 | PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+      | ^~~~~~~~~~~~~~~
+/home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/main.cpp:16:1: error: redefinition of ‘void pybind11_init_layernorm(pybind11::module_&)’
+   16 | PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+      | ^~~~~~~~~~~~~~~
+/home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/main.cpp:12:1: note: ‘void pybind11_init_layernorm(pybind11::module_&)’ previously defined here
+   12 | PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+      | ^~~~~~~~~~~~~~~
+[2/3] /opt/apps/cuda/12.2/bin/nvcc --generate-dependencies-with-compile --dependency-output cuda.cuda.o.d -DTORCH_EXTENSION_NAME=layernorm -DTORCH_API_INCLUDE_EXTENSION_H -DPYBIND11_COMPILER_TYPE=\"_gcc\" -DPYBIND11_STDLIB=\"_libstdcpp\" -DPYBIND11_BUILD_ABI=\"_cxxabi1011\" -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/torch/csrc/api/include -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/TH -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/lib/python3.10/site-packages/torch/include/THC -isystem /opt/apps/cuda/12.2/include -isystem /work/10238/vineeth_architect/ls6/miniconda3/envs/kernel-bench/include/python3.10 -D_GLIBCXX_USE_CXX11_ABI=0 -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=compute_86 -gencode=arch=compute_86,code=sm_86 --compiler-options '-fPIC' -std=c++17 -c /home1/10238/vineeth_architect/.cache/torch_extensions/py310_cu121/layernorm/cuda.cu -o cuda.cuda.o 
+ninja: build stopped: subcommand failed.
+Failed to compile custom CUDA kernel: Record as compilation failure. 
+Error: Error building extension 'layernorm'
+Iteration 1: Kernel compiled successfully
+Evaluation result for level 1 problem 40:
+compiled=False correctness=False metadata={'hardware': 'NVIDIA A100-PCIE-40GB', 'device': '0', 'compilation_error': RuntimeError("Error building extension 'layernorm'")} runtime=-1.0 runtime_stats={}
+

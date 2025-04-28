@@ -95,13 +95,10 @@ def query_server(
     model_name: str = "default",  # specify model type
 
     # for reasoning models
-    is_reasoning_model: bool = True, # indiactor of using reasoning models
+    is_reasoning_model: bool = False, # indiactor of using reasoning models
     budget_tokens: int = 0, # for claude thinking
-    reasoning_effort: str = "medium", # only for o1 and o3 / more reasoning models in the future
+    reasoning_effort: str = None, # only for o1 and o3 / more reasoning models in the future
 ):
-    
-    print(f"In the Query_Server function!")
-
     """
     Query various sort of LLM inference API providers
     Supports:
@@ -258,13 +255,13 @@ def query_server(
         if is_reasoning_model:
             assert "o1" in model or "o3" in model, "Only support o1 and o3 for now"
             print(f"Using OpenAI reasoning model: {model} with reasoning effort {reasoning_effort}")
-            # print(f"Using OpenAI reasoning model: {model} with reasoning effort {reasoning_effort}")
+            print(f"Using OpenAI reasoning model: {model} with reasoning effort {reasoning_effort}")
             response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "user", "content": prompt},
                 ],
-                # reasoning_effort=reasoning_effort,
+                reasoning_effort=reasoning_effort,
             )
         else:
             response = client.chat.completions.create(
@@ -386,8 +383,7 @@ SERVER_PRESETS = {
         "max_tokens": 4096,
     },
     "openai": {
-        # "model_name": "gpt-4o-2024-08-06",
-        "model_name": "o1-mini-2024-09-12",
+        "model_name": "gpt-4o-2024-08-06",
         # "model_name": "o1-preview-2024-09-12", # be careful with this one
         "temperature": 0.0,
         "max_tokens": 4096,
@@ -623,4 +619,3 @@ def maybe_multiprocess_cuda(
                     print("Got an error!", e)
                     continue
     return output_data
-

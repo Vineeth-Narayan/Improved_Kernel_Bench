@@ -463,6 +463,7 @@ Here are some best practices for writing CUDA kernels on GPU: \n\n"""
 
 
 def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
+    metadata = metadata[:1000] if len(metadata) > 1000 else metadata
     prompt = PROBLEM_STATEMENT
     prompt += f"""
     With the following architecture:
@@ -478,7 +479,14 @@ def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
     {metadata}
     ```
     
-    Please fix the compilation error in the new model code. Please output the corrected code in codeblocks.
+    Please analyze the error and fix the compilation issue in the new model code. Ensure the PyTorch extension has:
+    - A single PYBIND11_MODULE definition to avoid redefinition errors.
+    - Correct includes (e.g., <torch/extension.h>, <cuda_runtime.h>).
+    - Properly defined CUDA kernels compatible with the NVIDIA A100 (Ampere architecture, compute capability 8.0).
+    - Valid Python bindings for the kernel (e.g., m.def("layer_norm_cuda", &layer_norm_cuda)).
+    - No duplicate or conflicting function definitions.
+    - Correct usage of torch.utils.cpp_extension.load_inline, with separated cpp_sources and cuda_sources.
+    Output the corrected code in codeblocks.
     """
     return prompt
 

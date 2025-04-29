@@ -465,8 +465,15 @@ Here are some best practices for writing CUDA kernels on GPU: \n\n"""
 def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
     metadata = metadata[:1000] if len(metadata) > 1000 else metadata
     prompt = PROBLEM_STATEMENT
+    file_path = os.path.join(REPO_TOP_PATH, "output")
+    prompt += f""" Below I am attaching the whole history of the stdout with the errors, which might help you in fixing the kernel code looking at the errors:
+    content = ""
+    with open(file_path, 'r') as file:
+        for line in file:
+            content += line
+    prompt += content
     prompt += f"""
-    With the following architecture:
+    The architecture is as follows: 
     ```
     {ref_arch_src}
     ```
@@ -479,15 +486,9 @@ def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
     {metadata}
     ```
     
-    Please analyze the error and fix the compilation issue in the new model code that you gave, I have below attached the whole history of errors till now
+    Please analyze the error and fix the compilation issue in the new model code that you gave
+
     """
-    file_path = os.path.join(REPO_TOP_PATH, "output")
-    content = ""
-    with open(file_path, 'r') as file:
-        for line in file:
-            content += line
-    prompt += content
-    
     return prompt
 
 

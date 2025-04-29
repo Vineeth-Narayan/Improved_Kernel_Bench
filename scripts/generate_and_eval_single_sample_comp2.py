@@ -139,7 +139,7 @@ def main(config: EvalConfig):
             # Debug: Print the raw result
             print(f"Iteration {iteration + 1}: eval_kernel_against_ref result: {kernel_exec_result}")
             # Check compilation success
-            compilation_success = kernel_exec_result.get("compiled", False) if isinstance(kernel_exec_result, dict) else False
+            compilation_success = kernel_exec_result.compiled
             if compilation_success:
                 print(f"Iteration {iteration + 1}: Kernel compiled successfully")
                 break

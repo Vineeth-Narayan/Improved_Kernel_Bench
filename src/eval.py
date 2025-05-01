@@ -352,9 +352,6 @@ def eval_kernel_against_ref(
 
     # this is where compilation happens
     # saved_stdout = sys.stdout
-    sys.stdout.flush()
-    print("compilation_start")
-    sys.stdout.flush()
 
     try:
         os.environ["TORCH_USE_CUDA_DSA"] = "1"  # compile with device side assertion

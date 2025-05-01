@@ -136,7 +136,7 @@ def prompt_fix_correctness(ref_arch_src, custom_cuda, metadata):
     ```
     {custom_cuda}
     ```
-    Here's the details of correctness error:
+    Here's the details of runtime error or correctness feedback:
     ```
     {metadata}
     ```

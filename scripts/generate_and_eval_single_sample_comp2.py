@@ -17,6 +17,7 @@ Generate and evaluate a single sample with iterative compilation fixes
 #       to fetch compilation error msg, I printed out "compilation_start" at the start of eval_kernel_against_ref
 #       and "compilation_end" when it returns. extract_error_msg() function searches for the last appearance of "compilation_end"
 #       and "compilation_start" in the output file, and return the text (which is the compilation error msg) in between.
+#       TODO: has problems when correct and then have compilation error! needs fix
 #        
 # IDEAS: CoT (make LLMs add comments and explain what it does step by step) [DONE, for correctness]
 #       Temperature tuning. (alternate between high and low temp?) --> 
@@ -71,9 +72,10 @@ class EvalConfig(Config):
         return f"EvalConfig({self.to_dict()})"
 
 
-def gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src, problem_name):
+def gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src, problem_name, max_iterations=-1):
      # 3. Iterative Kernel Generation and Evaluation
-    max_iterations = config.max_correctness_fix_iterations
+    if max_iterations == -1: 
+        max_iterations = config.max_correctness_fix_iterations 
     custom_cuda = None
     kernel_exec_result = None
     compilation_success = False
@@ -140,6 +142,9 @@ def gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src,
                 f.write(custom_cuda)
 
         # Evaluate Kernel
+        sys.stdout.flush()
+        print("compilation_start")
+        sys.stdout.flush()
         try:
             kernel_exec_result = eval_kernel_against_ref(
                 ref_arch_src,
@@ -407,9 +412,16 @@ def main(config: EvalConfig):
     # for i in range(max_samples)
     correct_cuda = gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src, problem_name)
     # return 
-    # if correct_cuda:
-        # correct_cuda = read_file(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"))
+    if correct_cuda:
+        with open(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
+            f.write(correct_cuda)
         # gen_for_optimization(config, correct_cuda, high_temp_server, low_temp_server, ref_arch_src, problem_name)
+
+    # or
+    # correct_cuda = read_file(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"))
+    # gen_for_optimization(config, correct_cuda, high_temp_server, low_temp_server, ref_arch_src, problem_name)
+
+
 
 if __name__ == "__main__":
     main()

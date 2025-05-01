@@ -405,11 +405,11 @@ def main(config: EvalConfig):
         time_generation=True
     )
     # for i in range(max_samples)
-    # correct_cuda = gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src, problem_name)
+    correct_cuda = gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src, problem_name)
     # return 
     # if correct_cuda:
-    correct_cuda = read_file(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"))
-    gen_for_optimization(config, correct_cuda, high_temp_server, low_temp_server, ref_arch_src, problem_name)
+        # correct_cuda = read_file(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"))
+        # gen_for_optimization(config, correct_cuda, high_temp_server, low_temp_server, ref_arch_src, problem_name)
 
 if __name__ == "__main__":
     main()

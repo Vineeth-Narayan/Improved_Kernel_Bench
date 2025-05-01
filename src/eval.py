@@ -132,6 +132,7 @@ def load_custom_model(
         exec(model_custom_src, context)
         # DANGER: need to delete refernece from global namespace
     except SyntaxError as e:
+        # error_message = f"{e.msg} at line {e.lineno} col {e.offset}:\n{e.text}"
         print(f"Syntax Error in custom generated code or Compilation Error {e}")
         return None
 
@@ -350,31 +351,34 @@ def eval_kernel_against_ref(
     metadata["device"] = str(device)  # for debugging
 
     # this is where compilation happens
+    # saved_stdout = sys.stdout
+    print("compilation_start")
     try:
         os.environ["TORCH_USE_CUDA_DSA"] = "1"  # compile with device side assertion
         # add hash for later to distinguish between multi-turn kernels
         ModelNew = load_custom_model(custom_model_src, context, build_dir)
         torch.cuda.synchronize(device=device)  # not sure if this is too much
     except Exception as e:
-        print(
-            f"Failed to compile custom CUDA kernel: Record as compilation failure. \nError: {e}"
-        )
+
+        # print(
+        #     f"Failed to compile custom CUDA kernel: Record as compilation failure. \nError: {e}"
+        # )
         # TODO: add metadata for compilation error (how to we get the compilation error message?)
 
         if "lock" in str(e) or "No such file or directory" in str(e):
             # this is a lock file error, likely due to concurrent compilation
             # this does not necessarily mean the compilation failed, but we should retry
-            print(
-                f"[Eval] Lock file error during compilation, Please retry. Error: {e}"
-            )
+            # print(
+            #     f"[Eval] Lock file error during compilation, Please retry. Error: {e}"
+            # )
             graceful_eval_cleanup(context, device)
             return None
-        else:
+        else:        
             metadata["compilation_error"] = e
             graceful_eval_cleanup(context, device)
             return KernelExecResult(
                 compiled=False, metadata=metadata
-            )  # skip further steps
+            )  
 
     # at this point we passed compilation
     try:
@@ -594,6 +598,7 @@ def run_and_check_correctness(
             try:
                 output_new = model_new(*inputs)
                 torch.cuda.synchronize(device=device)
+                output_new = output_new.detach().clone()
                 if output.shape != output_new.shape:
                     metadata = register_and_format_exception(
                         "correctness_issue",

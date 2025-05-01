@@ -6,12 +6,15 @@ import json
 from datasets import load_dataset
 from src.dataset import construct_kernelbench_dataset
 from src.eval import eval_kernel_against_ref
-from src.prompt_constructor import prompt_generate_custom_cuda_from_prompt_template, prompt_fix_compile
-from src.utils import extract_first_code, query_server, set_gpu_arch, read_file, create_inference_server_from_presets
+from src.prompt_constructor import prompt_generate_custom_cuda_from_prompt_template, prompt_fix_compile, prompt_fix_correctness
+from src.utils import extract_first_code, extract_error_msg, query_server, set_gpu_arch, read_file, create_inference_server_from_presets
 
 """
 Generate and evaluate a single sample with iterative compilation fixes
 """
+
+# IDEAS: CoT (add comments), Temperature tuning, start over if iterations don't help?
+# TODO: less cringy and more concise prompts, add common mistake reminders!
 
 REPO_TOP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 torch.set_printoptions(precision=4, threshold=10)
@@ -23,18 +26,24 @@ class EvalConfig(Config):
         self.level = REQUIRED
         self.problem_id = REQUIRED
         self.eval_mode = "local"
-        self.gpu_arch = ["Ampere"]
-        self.server_type = "openai"
-        self.model_name = "o1-mini-2024-09-12"
-        self.max_tokens = 4096
-        self.temperature = 0.0
+        # self.gpu_arch = ["Ampere"]
+        self.gpu_arch = ["Turing"]
+        # self.server_type = "openai"
+        self.server_type ="deepseek"
+        # self.model_name = "o1-mini-2024-09-12"
+        self.model_name = "deepseek-chat"
+        self.max_tokens = 8192
+        # self.temperature = 0.0
+        self.temperature = 0.9
         self.logdir = os.path.join(REPO_TOP_DIR, "results/eval_logs")
+        self.output_dir = os.path.join(REPO_TOP_DIR, "results/outputs")
+
         self.verbose = True
         self.log = True
         self.log_prompt = True
         self.log_generated_kernel = True
         self.log_eval_result = True
-        self.max_compile_fix_iterations = 3
+        self.max_compile_fix_iterations = 7
 
     def verbose_logging(self):
         self.log = True
@@ -44,6 +53,116 @@ class EvalConfig(Config):
 
     def __repr__(self):
         return f"EvalConfig({self.to_dict()})"
+
+
+def gen_for_correctness(config, inference_server, ref_arch_src, problem_name):
+     # 3. Iterative Kernel Generation and Evaluation
+    max_iterations = config.max_compile_fix_iterations
+    custom_cuda = None
+    kernel_exec_result = None
+    compilation_success = False
+    correctness_success = False
+    for iteration in range(max_iterations):
+        print(f"Iteration {iteration + 1}/{max_iterations}: Generating and evaluating kernel")
+
+        # Generate Prompt
+        if iteration == 0:
+            custom_cuda_prompt = prompt_generate_custom_cuda_from_prompt_template(ref_arch_src)
+        else:
+            metadata = kernel_exec_result if (isinstance(kernel_exec_result, dict)) else kernel_exec_result.metadata
+            error_metadata = "NONE"
+            if not compilation_success:
+                print(f"Compilation failed in iteration {iteration}. Attempting to fix...")
+                path = os.path.join(config.output_dir, f"output{config.problem_id}")
+                error_metadata = extract_error_msg(path)
+                # with open(os.path.join(config.logdir, "compilation_msg_extracted"), "w") as f:
+                #     f.write(error_metadata")
+                custom_cuda_prompt = prompt_fix_compile(ref_arch_src, custom_cuda, error_metadata)
+            elif not correctness_success:
+                print(f"correctness failed in iteration {iteration}. Attempting to fix...")
+                error_metadata =  metadata.get("correctness_issue")
+                custom_cuda_prompt = prompt_fix_correctness(ref_arch_src, custom_cuda,  metadata.get("correctness_issue"))
+        if iteration != 0:
+            print("DEBUG: ")
+            print("KERNEL EXEC RESULT")
+            print(kernel_exec_result)
+            print("ERROR_METADATA")
+            print(error_metadata)
+            print("END_PRINT")
+        # Log Prompt
+        if config.log_prompt:
+            prompt_filename = f"prompt_level_{config.level}_problem_{config.problem_id}_iter_{iteration}.txt"
+            with open(os.path.join(config.logdir, prompt_filename), "w") as f:
+                f.write(custom_cuda_prompt)
+
+        # Query Server
+        custom_cuda = inference_server(custom_cuda_prompt)
+        # DEBUG: Log response 
+        if config.log:
+            kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{iteration}_raw.py"
+            with open(os.path.join(config.logdir, kernel_filename), "w") as f:
+                f.write(custom_cuda)
+        custom_cuda = extract_first_code(custom_cuda, ["python", "cpp"])
+        assert custom_cuda is not None, f"Iteration {iteration + 1}: Custom CUDA code generation failed"
+
+        # Log Generated Kernel
+        if config.log:
+            kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{iteration}.py"
+            with open(os.path.join(config.logdir, kernel_filename), "w") as f:
+                f.write(custom_cuda)
+
+        # Evaluate Kernel
+        try:
+            kernel_exec_result = eval_kernel_against_ref(
+                ref_arch_src,
+                custom_cuda,
+                verbose=False,
+                measure_performance=False,
+                num_correct_trials=5,
+                num_perf_trials=100
+            )  
+
+            # Debug: Print the raw result
+            # print(f"Iteration {iteration + 1}: eval_kernel_against_ref result: {kernel_exec_result}")
+            # Check compilation success
+            compilation_success = kernel_exec_result.compiled
+            correctness_success = kernel_exec_result.correctness
+            if compilation_success and correctness_success:
+            #     print(f"Iteration {iteration + 1}: Kernel compiled successfully")
+                break
+            # else:
+            #     print(f"Iteration {iteration + 1}: Compilation failed (result indicates compiled=False)")
+        except Exception as e:
+            kernel_exec_result = {"compiled": False, "compilation_error": str(e)}
+            compilation_success = False
+            print(f"Compilation failed with error: {str(e)}")
+        print("compilation_end")
+
+
+        # Log Evaluation Result
+        if config.log:
+            eval_filename = f"eval_result_level_{config.level}_problem_{config.problem_id}_iter_{iteration}.txt"
+            with open(os.path.join(config.logdir, eval_filename), "w") as f:
+                f.write(f"Problem Name: {problem_name}\n")
+                f.write(f"Iteration: {iteration + 1}\n")
+                f.write(f"Compilation Success: {compilation_success}\n")
+                f.write(str(kernel_exec_result) + "\n")
+
+    # Final Result
+    if compilation_success:
+        print(f"Evaluation result for level {config.level} problem {config.problem_id}:\n{kernel_exec_result}")
+    else:
+        print(f"Failed to generate a correct kernel after {max_iterations} iterations")
+        kernel_exec_result = kernel_exec_result or {"compiled": False, "error": f"Failed after {max_iterations} iterations"}
+
+    # Log Final Result
+    if config.log:
+        with open(os.path.join(config.logdir, f"eval_result_level_{config.level}_problem_{config.problem_id}.txt"), "a") as f:
+            f.write(f"Problem Name: {problem_name}\n")
+            f.write(f"Final Result after {max_iterations} iterations\n")
+            f.write(f"Compilation Success: {compilation_success}\n")
+            f.write(str(kernel_exec_result))
+
 
 @pydra.main(base=EvalConfig)
 def main(config: EvalConfig):
@@ -92,87 +211,7 @@ def main(config: EvalConfig):
         time_generation=True
     )
 
-    # 3. Iterative Kernel Generation and Evaluation
-    max_iterations = config.max_compile_fix_iterations
-    custom_cuda = None
-    kernel_exec_result = None
-    compilation_success = False
-
-    for iteration in range(max_iterations):
-        print(f"Iteration {iteration + 1}/{max_iterations}: Generating and evaluating kernel")
-
-        # Generate Prompt
-        if iteration == 0:
-            custom_cuda_prompt = prompt_generate_custom_cuda_from_prompt_template(ref_arch_src)
-        else:
-            print(f"Compilation failed in iteration {iteration}. Attempting to fix...")
-            error_metadata = kernel_exec_result.get("compilation_error", "No error details provided") if isinstance(kernel_exec_result, dict) else str(kernel_exec_result)
-            custom_cuda_prompt = prompt_fix_compile(ref_arch_src, custom_cuda, error_metadata)
-
-        # Log Prompt
-        if config.log_prompt:
-            prompt_filename = f"prompt_level_{config.level}_problem_{config.problem_id}_iter_{iteration}.txt"
-            with open(os.path.join(config.logdir, prompt_filename), "w") as f:
-                f.write(custom_cuda_prompt)
-
-        # Query Server
-        custom_cuda = inference_server(custom_cuda_prompt)
-        custom_cuda = extract_first_code(custom_cuda, ["python", "cpp"])
-        assert custom_cuda is not None, f"Iteration {iteration + 1}: Custom CUDA code generation failed"
-
-        # Log Generated Kernel
-        if config.log:
-            kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{iteration}.py"
-            with open(os.path.join(config.logdir, kernel_filename), "w") as f:
-                f.write(custom_cuda)
-
-        # Evaluate Kernel
-        try:
-            kernel_exec_result = eval_kernel_against_ref(
-                ref_arch_src,
-                custom_cuda,
-                verbose=config.verbose,
-                measure_performance=True,
-                num_correct_trials=5,
-                num_perf_trials=100
-            )
-            # Debug: Print the raw result
-            print(f"Iteration {iteration + 1}: eval_kernel_against_ref result: {kernel_exec_result}")
-            # Check compilation success
-            compilation_success = kernel_exec_result.compiled
-            if compilation_success:
-                print(f"Iteration {iteration + 1}: Kernel compiled successfully")
-                break
-            else:
-                print(f"Iteration {iteration + 1}: Compilation failed (result indicates compiled=False)")
-        except Exception as e:
-            kernel_exec_result = {"compiled": False, "compilation_error": str(e)}
-            compilation_success = False
-            print(f"Iteration {iteration + 1}: Compilation failed with error: {str(e)}")
-
-        # Log Evaluation Result
-        if config.log:
-            eval_filename = f"eval_result_level_{config.level}_problem_{config.problem_id}_iter_{iteration}.txt"
-            with open(os.path.join(config.logdir, eval_filename), "w") as f:
-                f.write(f"Problem Name: {problem_name}\n")
-                f.write(f"Iteration: {iteration + 1}\n")
-                f.write(f"Compilation Success: {compilation_success}\n")
-                f.write(str(kernel_exec_result) + "\n")
-
-    # Final Result
-    if compilation_success:
-        print(f"Evaluation result for level {config.level} problem {config.problem_id}:\n{kernel_exec_result}")
-    else:
-        print(f"Failed to generate a compilable kernel after {max_iterations} iterations")
-        kernel_exec_result = kernel_exec_result or {"compiled": False, "error": f"Failed after {max_iterations} iterations"}
-
-    # Log Final Result
-    if config.log:
-        with open(os.path.join(config.logdir, f"eval_result_level_{config.level}_problem_{config.problem_id}.txt"), "a") as f:
-            f.write(f"Problem Name: {problem_name}\n")
-            f.write(f"Final Result after {max_iterations} iterations\n")
-            f.write(f"Compilation Success: {compilation_success}\n")
-            f.write(str(kernel_exec_result))
+    gen_for_correctness(config, inference_server, ref_arch_src, problem_name)
 
 if __name__ == "__main__":
     main()

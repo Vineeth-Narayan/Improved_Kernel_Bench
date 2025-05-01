@@ -503,7 +503,7 @@ def register_and_format_exception(
 def time_execution_with_cuda_event(
     kernel_fn: callable,
     *args,
-    num_warmup: int = 5,
+    num_warmup: int = 10,
     num_trials: int = 10,
     verbose: bool = True,
     device: torch.device = None,
@@ -730,7 +730,7 @@ def check_metadata_serializable_all_types(metadata: dict):
 
 
 def fetch_baseline_time(
-    level_name: str, problem_id: int, dataset: list[str], baseline_time_filepath: str
+    level: int, problem_name: str, baseline_time_filepath: str
 ) -> dict:
     """
     Fetch the baseline time from the time
@@ -743,8 +743,8 @@ def fetch_baseline_time(
     with open(baseline_time_filepath, "r") as f:
         baseline_json = json.load(f)
 
-    problem_name = dataset[problem_id].split("/")[-1]
-    baseline_time = baseline_json[level_name].get(problem_name, None)
+    # problem_name = dataset[problem_id].split("/")[-1]
+    baseline_time = baseline_json[f"level{level}"].get(problem_name+".py", None)
     return baseline_time
 
 

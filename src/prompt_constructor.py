@@ -51,22 +51,27 @@ in the given architecture to get speedups. \n
     or algorithmic changes (such as online softmax).\n
 """
 
-REMINDERS = "Remember to include appropriate import statements in your code, and make sure that your parentheses are balanced.\n"
-
+REMINDERS = """Remember to include appropriate import statements in your code (such as import math), 
+and make sure that parentheses in your code are balanced.\n"""
 
 COT_INSTRUCTION = """Please think step by step. Concisely explain your code in comments or in text outside of codeblocks\n"""
 
+# PROBLEM_INSTRUCTION_CORRECTNESS = """
+# Implement the architecture named Model with custom CUDA operators! 
+# Name your optimized output architecture ModelNew. Output the new code in codeblocks. 
+# Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. 
+# Just output the new model code, no other text, and NO testing code! \n
+# """
 PROBLEM_INSTRUCTION_CORRECTNESS = """
 Implement the architecture named Model with custom CUDA operators! 
-Name your optimized output architecture ModelNew. Output the new code in codeblocks. 
-Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. 
-Just output the new model code, no other text, and NO testing code! \n
+Name your output architecture ModelNew. Output the new code in codeblocks. Do NOT generate supplementary code e.g. test code. 
+Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. \n
 """
-PROBLEM_INSTRUCTION_CORRECTNESS_COT = """
-Implement the architecture named Model with custom CUDA operators! 
-Name your optimized output architecture ModelNew. Output the new code in codeblocks. 
-Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. 
-Please think step by step. Concisely explain your code in comments or in text outside of codeblocks \n
+
+PROBLEM_INSTRUCTION_OPTIMIZATION = """
+Now, optimize the above ModelNew architecture! Name your optimized output architecture ModelNew. Do not change architecture format.
+Output the new code in codeblocks. Do NOT generate supplementary code e.g. test code. 
+Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. \n
 """
 def prompt_generate_custom_cuda_correctness(
     arc_src: str, example_arch_src: str, example_new_arch_src: str
@@ -91,7 +96,7 @@ def prompt_generate_custom_cuda_correctness(
     {arc_src}
     ```
     """
-    prompt += PROBLEM_INSTRUCTION_CORRECTNESS_COT + REMINDERS
+    prompt += PROBLEM_INSTRUCTION_CORRECTNESS + COT_INSTRUCTION + REMINDERS
     return prompt
 
 
@@ -141,11 +146,107 @@ def prompt_fix_correctness(ref_arch_src, custom_cuda, metadata):
     {metadata}
     ```
     Please consider how your custom CUDA kernels are implemented, how it is different from the reference implementation, 
-    and fix the correctness error in the new model code. Please output the corrected code in codeblocks.
+    and fix the correctness error in the new model code. Please output the corrected code in codeblocks. Do not generate
+    any other code e.g. test code. 
     {COT_INSTRUCTION}
     {REMINDERS}
     """
     return prompt
+
+def prompt_for_optimization(ref_arch_src: str, custom_cuda, cuda_runtime, torch_runtime, gpu_name=None, shots=None, recommendation=None):
+    # arch = ref_arch_src
+
+    # example_arch_path = os.path.join(
+    #     REPO_TOP_PATH, f"src/prompts/model_ex_add.py"
+    # )
+    # example_new_arch_path = os.path.join(
+    #     REPO_TOP_PATH, f"src/prompts/model_new_ex_add.py"
+    # )
+
+    gpu_spec_file_path = os.path.join(REPO_TOP_PATH, f"src/prompts/hardware/gpu_specs.py")
+
+    # example_arch = read_file(example_arch_path)
+    # example_new_arch = read_file(example_new_arch_path)
+    gpu_spec_info = read_file(gpu_spec_file_path)
+
+    prompt = f"""
+    {PROBLEM_STATEMENT}
+    
+    You are given the following architecture to implement: \n
+    ```
+    {ref_arch_src}
+    ```
+    You generated the following solution, with an average runtime of {cuda_runtime}ms:\n
+    ```
+    {custom_cuda}
+    ```
+    {PROBLEM_INSTRUCTION_OPTIMIZATION}
+    There exists a correct implementation with average runtime of {torch_runtime}ms.\n
+    """
+    if recommendation:
+        prompt += f"""
+        Please try to perform the following optimization, correctly: {recommendation}\n
+        """
+    if shots:
+        prompt += few_shot_prompt(ref_arch_src, shots)
+    if gpu_name:
+        prompt += hardware_info_prompt(gpu_name, gpu_spec_info)
+
+    return prompt + COT_INSTRUCTION + REMINDERS
+
+    
+
+def few_shot_prompt(ref_arch_src: str, shots=[]):
+       
+    prompt = "Here are examples usage of optimization techniques:\n"
+    example_dir = os.path.join(REPO_TOP_PATH, "src/prompts/few_shot")
+    matmul_tensorcore_path = os.path.join(example_dir, "matmul_tensorcore.py")
+    matmul_tiled_path = os.path.join(example_dir, "matmul_tiled.py")
+    flash_attn_path = os.path.join(example_dir, "flash_sttn.py")
+    if "tensorcore" in shots:
+        matmul_tensorcore = read_file(matmul_tensorcore_path)
+        prompt += f"""tensor core wmma example:\n
+        ```{matmul_tensorcore}```\n"""
+
+    return prompt + "End of examples.\n\n"
+
+def hardware_info_prompt( gpu_name: str, 
+                gpu_spec_info_src: str) -> str:
+
+    # Create a dictionary to store the local namespace
+    local_dict = {}
+    
+    # Execute the GPU spec file in the local namespace
+    exec(gpu_spec_info_src, {}, local_dict)
+    
+    # Get the required variables from the local namespace
+    GPU_SPEC_INFO = local_dict.get('GPU_SPEC_INFO')
+    GPU_BEST_PRACTICES = local_dict.get('GPU_BEST_PRACTICES')
+    
+    if not GPU_SPEC_INFO or not GPU_BEST_PRACTICES:
+        raise ValueError("GPU_SPEC_INFO or GPU_BEST_PRACTICES not found in gpu_spec_info_src")
+
+    assert gpu_name in GPU_SPEC_INFO, f"GPU name {gpu_name} not found in GPU_SPEC_INFO"
+    
+    curr_gpu_spec_info = GPU_SPEC_INFO[gpu_name]
+
+    gpu_architecture = curr_gpu_spec_info.get("GPU Architecture")
+    prompt = f"""The GPU that will run the kernel is NVIDIA {gpu_name}, {gpu_architecture} architecture with the following specs\n\n"""
+    
+    for key, value in curr_gpu_spec_info.items():
+        if key == "GPU Architecture":
+            continue
+        prompt += f"""- We have {value} of {key}.\n"""
+    
+    
+    prompt += f"""\n\nHere are some general best practices for writing CUDA kernels: \n\n"""
+    for best_practice in GPU_BEST_PRACTICES:
+        prompt += f"""- {best_practice}\n"""
+
+    return prompt
+
+
+
 
 
 

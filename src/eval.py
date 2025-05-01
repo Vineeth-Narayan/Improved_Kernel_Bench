@@ -621,7 +621,7 @@ def run_and_check_correctness(
                     avg_diff = torch.mean(torch.abs(output - output_new)).item()
                     metadata.setdefault("max_difference", []).append(f"{max_diff:.6f}")
                     metadata.setdefault("avg_difference", []).append(f"{avg_diff:.6f}")
-                    metadata["correctness_issue"] = "Output mismatch"
+                    metadata["correctness_issue"] = "correct shape, output value mismatch"
                     if verbose:
                         print(f"[FAIL] trial {trial}: Output mismatch")
                 else:  # pass
@@ -630,7 +630,7 @@ def run_and_check_correctness(
                         print(f"[PASS] trial {trial}: New Model matches Model")
 
             except Exception as e:
-                print("[Error] Exception happens during correctness check")
+                # print("[Error] Exception happens during correctness check")
                 print(f"Error in launching kernel for ModelNew: {e}")
 
                 metadata = register_and_format_exception(

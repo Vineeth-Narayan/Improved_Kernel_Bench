@@ -35,17 +35,37 @@ def get_arch_definition(arch_src):
 ############################################
 # CUDA Prompt
 ############################################
-PROBLEM_STATEMENT = """You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
-    You have complete freedom to choose the set of operators you want to replace. You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. You may replace multiple operators with custom implementations, consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), or algorithmic changes (such as online softmax). You are only limited by your imagination.\n
-"""
+# PROBLEM_STATEMENT = """You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
+#     You have complete freedom to choose the set of operators you want to replace. You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. You may replace multiple operators with custom implementations, consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), or algorithmic changes (such as online softmax). You are only limited by your imagination.\n
+# """
 PROBLEM_INSTRUCTION = """
 Optimize the architecture named Model with custom CUDA operators! Name your optimized output architecture ModelNew. Output the new code in codeblocks. Please generate real code, NOT pseudocode, make sure the code compiles and is fully functional. Just output the new model code, no other text, and NO testing code! \n
 """
-REMINDERS = "Remember to import associated libraries in your code.\n"
 
+PROBLEM_STATEMENT = """You are an expert in CUDA engineering! You write custom CUDA kernels to replace the pytorch operators 
+in the given architecture to get speedups. \n
+    You have complete freedom to choose the set of operators you want to replace. 
+    You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. 
+    You may replace multiple operators with custom implementations, 
+    consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), 
+    or algorithmic changes (such as online softmax).\n
+"""
+PROBLEM_INSTRUCTION_CORRECTNESS = """
+Implement the architecture named Model with custom CUDA operators! 
+Name your optimized output architecture ModelNew. Output the new code in codeblocks. 
+Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. 
+Just output the new model code, no other text, and NO testing code! \n
+"""
+PROBLEM_INSTRUCTION_CORRECTNESS_COT = """
+Implement the architecture named Model with custom CUDA operators! 
+Name your optimized output architecture ModelNew. Output the new code in codeblocks. 
+Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. 
+Please think step by step, and concisely explain your code in comments or in text outside of codeblocks \n
+"""
 def prompt_generate_custom_cuda(
     arc_src: str, example_arch_src: str, example_new_arch_src: str
 ) -> str:
+    REMINDERS = "Remember to include appropriate import statements in your code.\n"
     prompt = PROBLEM_STATEMENT
 
     if example_arch_src != "" and example_new_arch_src != "":
@@ -65,6 +85,7 @@ def prompt_generate_custom_cuda(
     ```
     {arc_src}
     ```
+    {REMINDERS}
     """
     prompt += PROBLEM_INSTRUCTION + REMINDERS
     return prompt
@@ -481,12 +502,12 @@ def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
     ```
     {custom_cuda}
     ```
-    Here's the metadata of the compilation error:
+    Here's compilation error message (you may ignore warnings):
     ```
     {metadata}
     ```
     
-    Please analyze the error and fix the compilation issue in the new model code that you gave
+    Please analyze the error and fix the compilation issue in the new model code.
 
     """
     return prompt
@@ -503,11 +524,12 @@ def prompt_fix_correctness(ref_arch_src, custom_cuda, metadata):
     ```
     {custom_cuda}
     ```
-    Here's the metadata of the correctness error:
+    Here's the details of correctness error:
     ```
     {metadata}
     ```
-    Please consider how your custom CUDA kernels are implemented, how it is different from the reference implementation, and fix the correctness error in the new model code. Please output the corrected code in codeblocks.
+    Please consider how your custom CUDA kernels are implemented, how it is different from the reference implementation, 
+    and fix the correctness error in the new model code. Please output the corrected code in codeblocks.
     """
     return prompt
 

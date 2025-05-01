@@ -352,7 +352,10 @@ def eval_kernel_against_ref(
 
     # this is where compilation happens
     # saved_stdout = sys.stdout
+    sys.stdout.flush()
     print("compilation_start")
+    sys.stdout.flush()
+
     try:
         os.environ["TORCH_USE_CUDA_DSA"] = "1"  # compile with device side assertion
         # add hash for later to distinguish between multi-turn kernels
@@ -438,6 +441,19 @@ def eval_kernel_against_ref(
                     for x in inputs
                 ]
                 model_new = custom_model.cuda(device=device)
+
+                # This is how you can measure reference perf!
+                # import types
+                # def load_module_from_code(code_string):
+                #     module = types.ModuleType("dynamic_module")
+                #     exec(code_string, module.__dict__)
+                #     return module
+                # module = load_module_from_code(original_model_src)
+      
+                # model_new = module.Model().to('cuda')
+                # model_new.eval() 
+                # This is how you can measure reference perf!
+
                 torch.cuda.synchronize(device=device)
 
                 elapsed_times = time_execution_with_cuda_event(
@@ -490,7 +506,7 @@ def register_and_format_exception(
 def time_execution_with_cuda_event(
     kernel_fn: callable,
     *args,
-    num_warmup: int = 3,
+    num_warmup: int = 5,
     num_trials: int = 10,
     verbose: bool = True,
     device: torch.device = None,
@@ -618,9 +634,9 @@ def run_and_check_correctness(
                     output, output_new, atol=1e-02, rtol=1e-02
                 ):  # fail
                     max_diff = torch.max(torch.abs(output - output_new)).item()
-                    avg_diff = torch.mean(torch.abs(output - output_new)).item()
+                    # avg_diff = torch.mean(torch.abs(output - output_new)).item()
                     metadata.setdefault("max_difference", []).append(f"{max_diff:.6f}")
-                    metadata.setdefault("avg_difference", []).append(f"{avg_diff:.6f}")
+                    # metadata.setdefault("avg_difference", []).append(f"{avg_diff:.6f}")
                     metadata["correctness_issue"] = "correct shape, output value mismatch"
                     if verbose:
                         print(f"[FAIL] trial {trial}: Output mismatch")

@@ -50,6 +50,12 @@ in the given architecture to get speedups. \n
     consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), 
     or algorithmic changes (such as online softmax).\n
 """
+
+REMINDERS = "Remember to include appropriate import statements in your code, and make sure that your parentheses are balanced.\n"
+
+
+COT_INSTRUCTION = """Please think step by step. Concisely explain your code in comments or in text outside of codeblocks\n"""
+
 PROBLEM_INSTRUCTION_CORRECTNESS = """
 Implement the architecture named Model with custom CUDA operators! 
 Name your optimized output architecture ModelNew. Output the new code in codeblocks. 
@@ -60,12 +66,11 @@ PROBLEM_INSTRUCTION_CORRECTNESS_COT = """
 Implement the architecture named Model with custom CUDA operators! 
 Name your optimized output architecture ModelNew. Output the new code in codeblocks. 
 Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. 
-Please think step by step, and concisely explain your code in comments or in text outside of codeblocks \n
+Please think step by step. Concisely explain your code in comments or in text outside of codeblocks \n
 """
-def prompt_generate_custom_cuda(
+def prompt_generate_custom_cuda_correctness(
     arc_src: str, example_arch_src: str, example_new_arch_src: str
 ) -> str:
-    REMINDERS = "Remember to include appropriate import statements in your code.\n"
     prompt = PROBLEM_STATEMENT
 
     if example_arch_src != "" and example_new_arch_src != "":
@@ -85,10 +90,70 @@ def prompt_generate_custom_cuda(
     ```
     {arc_src}
     ```
+    """
+    prompt += PROBLEM_INSTRUCTION_CORRECTNESS_COT + REMINDERS
+    return prompt
+
+
+def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
+    # metadata = metadata[:1000] if len(metadata) > 1000 else metadata
+    prompt = PROBLEM_STATEMENT
+    file_path = os.path.join(REPO_TOP_PATH, "output")
+    # prompt += f""" Below I am attaching the whole history of the stdout with the errors, which might help you in fixing the kernel code looking at the errors:"""
+    # content = ""
+    # with open(file_path, 'r') as file:
+    #     for line in file:
+    #         content += line
+    # prompt += content
+    prompt += f"""
+    The architecture is as follows: 
+    ```
+    {ref_arch_src}
+    ```
+    You generated the following solution and it failed to compile:
+    ```
+    {custom_cuda}
+    ```
+    Here's compilation error message (you may ignore warnings):
+    ```
+    {metadata}
+    ```
+    
+    Please analyze the error and fix the compilation issue in the new model code.
+
+    """
+    return prompt
+
+
+def prompt_fix_correctness(ref_arch_src, custom_cuda, metadata):
+    prompt = PROBLEM_STATEMENT
+    prompt += f"""
+    With the following architecture:
+    ```
+    {ref_arch_src}
+    ```
+    You generated the following solution and it failed correctness:
+    ```
+    {custom_cuda}
+    ```
+    Here's the details of correctness error:
+    ```
+    {metadata}
+    ```
+    Please consider how your custom CUDA kernels are implemented, how it is different from the reference implementation, 
+    and fix the correctness error in the new model code. Please output the corrected code in codeblocks.
+    {COT_INSTRUCTION}
     {REMINDERS}
     """
-    prompt += PROBLEM_INSTRUCTION + REMINDERS
     return prompt
+
+
+
+
+
+
+
+
 
 
 PROBLEM_STATEMENT_CLEANED = """You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups.\n\nYou have complete freedom to choose the set of operators you want to replace. You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. You may replace multiple operators with custom implementations, consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), or algorithmic changes (such as online softmax). You are only limited by your imagination.\n
@@ -96,6 +161,8 @@ PROBLEM_STATEMENT_CLEANED = """You write custom CUDA kernels to replace the pyto
 PROBLEM_INSTRUCTION_CLEANED = """
 Optimize the architecture named Model with custom CUDA operators! Name your optimized output architecture ModelNew. Output the new code in codeblocks. Please generate real code, NOT pseudocode, make sure the code compiles and is fully functional. Just output the new model code, no other text, and NO testing code! \n
 """
+
+
 
 def prompt_generate_custom_cuda_fewshot_and_template(ref_arch_src: str, shots: list) -> str:
     """
@@ -365,7 +432,7 @@ def prompt_generate_custom_cuda_from_prompt_template(ref_arch_src: str) -> str:
     example_arch = read_file(example_arch_path)
     example_new_arch = read_file(example_new_arch_path)
 
-    return prompt_generate_custom_cuda(arch, example_arch, example_new_arch)
+    return prompt_generate_custom_cuda_correctness(arch, example_arch, example_new_arch)
 
 
 def prompt_generate_prompt_with_hardware_info_from_template(ref_arch_src: str, gpu_name: str) -> str:
@@ -482,56 +549,6 @@ Here are some best practices for writing CUDA kernels on GPU: \n\n"""
 
 
 
-
-def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
-    # metadata = metadata[:1000] if len(metadata) > 1000 else metadata
-    prompt = PROBLEM_STATEMENT
-    file_path = os.path.join(REPO_TOP_PATH, "output")
-    # prompt += f""" Below I am attaching the whole history of the stdout with the errors, which might help you in fixing the kernel code looking at the errors:"""
-    # content = ""
-    # with open(file_path, 'r') as file:
-    #     for line in file:
-    #         content += line
-    # prompt += content
-    prompt += f"""
-    The architecture is as follows: 
-    ```
-    {ref_arch_src}
-    ```
-    You generated the following solution and it failed to compile:
-    ```
-    {custom_cuda}
-    ```
-    Here's compilation error message (you may ignore warnings):
-    ```
-    {metadata}
-    ```
-    
-    Please analyze the error and fix the compilation issue in the new model code.
-
-    """
-    return prompt
-
-
-def prompt_fix_correctness(ref_arch_src, custom_cuda, metadata):
-    prompt = PROBLEM_STATEMENT
-    prompt += f"""
-    With the following architecture:
-    ```
-    {ref_arch_src}
-    ```
-    You generated the following solution and it failed correctness:
-    ```
-    {custom_cuda}
-    ```
-    Here's the details of correctness error:
-    ```
-    {metadata}
-    ```
-    Please consider how your custom CUDA kernels are implemented, how it is different from the reference implementation, 
-    and fix the correctness error in the new model code. Please output the corrected code in codeblocks.
-    """
-    return prompt
 
 def main():
     gpu_name = "L40S"

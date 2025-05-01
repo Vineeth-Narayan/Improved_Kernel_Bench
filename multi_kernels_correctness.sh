@@ -10,7 +10,7 @@ leaderboard:
 61: 
 74:
 '
-problem_ids=(1 21 24 40 51 61 74)
+problem_ids=(51 61 74)
 
 
 for i in "${problem_ids[@]}"; do

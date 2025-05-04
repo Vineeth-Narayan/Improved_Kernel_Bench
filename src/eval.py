@@ -374,7 +374,7 @@ def eval_kernel_against_ref(
             graceful_eval_cleanup(context, device)
             return None
         else:        
-            metadata["compilation_error"] = e
+            metadata["compilation_error"] = str(e)
             graceful_eval_cleanup(context, device)
             return KernelExecResult(
                 compiled=False, metadata=metadata

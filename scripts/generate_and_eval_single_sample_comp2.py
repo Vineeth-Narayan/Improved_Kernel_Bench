@@ -27,8 +27,7 @@ Generate and evaluate a single sample with iterative compilation fixes
 #       sample high level rec and few shot example [IN PROGRESS, only wmma now]
 #       hw info [DONE], doesn't seem too helpful
 
-# TODO: send max diff as correctness feedback
-#       right now, optimization loop only tries out wmma, not nearly finished
+# TODO:  right now, optimization loop only tries out wmma, not nearly finished
 #       more flexible logging in correctness loop, specifically, seperate correctness logs and optimization logs
 #       
 
@@ -88,12 +87,12 @@ def get_fix_prompts(config, kernel_exec_result, ref_arch_src, custom_cuda, compi
     error_metadata = "NONE"
     if not compiled:
         path = os.path.join(config.output_dir, f"output_{config.problem_id}")
-        error_metadata = extract_error_msg(path)
+        error_metadata = extract_error_msg(path) + "\n" + metadata["compilation_error"]
         custom_cuda_prompt = prompt_fix_compile(ref_arch_src, custom_cuda, error_metadata)
 
-    # NOTE: to gen only for compilation, take out this elif and correct variable
-    elif not correct:
-        if not metadata.get("runtime_error"):
+    if not correct:
+        metadata = kernel_exec_result.metadata
+        if not "runtime_error" in metadata:
             error_metadata =  f"{metadata.get("correctness_issue")}. Max differences of each trial: {metadata.get("max_difference")}. "
         else:
             error_metadata = metadata.get("runtime_error")
@@ -380,7 +379,7 @@ def main(config: EvalConfig):
                                                     ref_arch_src = ref_arch_src, 
                                                     problem_name = problem_name
                                                     )
-    with open(os.path.join(config.logdir, f"correct_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
+    with open(os.path.join(config.logdir, f"optimized_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
         f.write(f"# runtime: {optimized_runtime}\n")        
         f.write(f"# basline: {baseline_runtime}\n")
         f.write(optimized_cuda)

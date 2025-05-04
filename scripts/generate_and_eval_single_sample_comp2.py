@@ -35,7 +35,7 @@ REPO_TOP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORRECTNESS_SAMPLES = 3
 CORRECTNESS_ITERATIONS = 10
 OPTIMIZATION_SAMPLES = 3
-OPTIMIZATION_ITERATIONS = 20
+OPTIMIZATION_ITERATIONS = 10
 
 
 torch.set_printoptions(precision=4, threshold=10)
@@ -90,13 +90,13 @@ def get_fix_prompts(config, kernel_exec_result, ref_arch_src, custom_cuda, compi
         error_metadata = extract_error_msg(path) + "\n" + metadata["compilation_error"]
         custom_cuda_prompt = prompt_fix_compile(ref_arch_src, custom_cuda, error_metadata)
 
-    if not correct:
+    elif not correct:
         metadata = kernel_exec_result.metadata
         if not "runtime_error" in metadata:
             error_metadata =  f"{metadata.get("correctness_issue")}. Max differences of each trial: {metadata.get("max_difference")}. "
         else:
             error_metadata = metadata.get("runtime_error")
-        error_metadata =  metadata.get("correctness_issue") if not metadata.get("runtime_error") else metadata.get("runtime_error")
+        # error_metadata =  metadata.get("correctness_issue") if not metadata.get("runtime_error") else metadata.get("runtime_error")
         custom_cuda_prompt = prompt_fix_correctness(ref_arch_src, custom_cuda, error_metadata)
 
     if config.debug:
@@ -109,7 +109,7 @@ def get_fix_prompts(config, kernel_exec_result, ref_arch_src, custom_cuda, compi
         sys.stdout.flush()
     return custom_cuda_prompt
         
-def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server, ref_arch_src, problem_name, max_iterations, log_dir, optimization_prompt=None):
+def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server, ref_arch_src, problem_name, max_iterations, log_dir, optimization_prompt=None, start_at=0):
      # 3. Iterative Kernel Generation and Evaluation
     custom_cuda = None
     kernel_exec_result = None
@@ -190,7 +190,7 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
             mode = "w" if iteration == 0 else "a"
             with open(os.path.join(log_dir, eval_filename), mode) as f:
                 f.write(f"Problem Name: {problem_name}\n")
-                f.write(f"Iteration: {iteration + 1}\n")
+                f.write(f"Iteration: {iteration + 1 + start_at}\n")
                 f.write(f"Compilation Success: {compiled}\n")
                 f.write(f"Correctness Success: {correct}\n")
                 f.write(str(kernel_exec_result) + "\n")
@@ -205,7 +205,7 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
     if config.log:
         with open(os.path.join(log_dir, f"result_level_{config.level}_problem_{config.problem_id}.txt"), "w") as f:
             f.write(f"Problem Name: {problem_name}\n")
-            f.write(f"Final Result after {iteration+1} iterations\n")
+            f.write(f"Final Result after {iteration+1+start_at} iterations\n")
             f.write(f"Compilation Success: {compiled}\n")
             f.write(f"Correctness Success: {correct}\n")
             f.write(str(kernel_exec_result))
@@ -257,7 +257,7 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
     else:
         best_runtime = initial_runtime
 
-
+    id = 1
     for sample in range(max_samples):
         shot = recommendations[sample % len(recommendations)][0]
         rec = recommendations[sample % len(recommendations)][1]
@@ -288,12 +288,13 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
                 best_runtime = new_runtime
                 best_cuda = new_cuda
                 if config.log:
-                    with open(os.path.join(log_dir, f"optimize_result_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
+                    with open(os.path.join(log_dir, f"optimize_result_level_{config.level}_problem_{config.problem_id}_solution_{id}.py"), "w") as f:
                         f.write(f"# Problem Name: {problem_name}\n")
-                        f.write(f"# Final Result after {iteration+1} iterations\n")
+                        f.write(f"# optimized kernel after {iteration+1} iterations\n")
                         f.write(f"# runtime: {best_runtime}\n")
                         f.write(f"# baseline: {baseline_runtime}\n")
                         f.write(best_cuda)
+                id += 1
     return best_cuda, best_runtime
 
 

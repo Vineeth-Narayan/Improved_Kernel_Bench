@@ -69,11 +69,42 @@ Please generate real code, NOT pseudocode, make sure the code compiles and is fu
 """
 
 PROBLEM_INSTRUCTION_OPTIMIZATION = """
-Now, optimize the above ModelNew architecture! Name your optimized output architecture ModelNew. Do not change architecture format.
+Now, optimize the above ModelNew architecture. Name your optimized output architecture ModelNew. Do not change architecture format.
 Output the new code in codeblocks. Do NOT generate supplementary code e.g. test code. 
-Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. \n
+Please generate real code, NOT pseudocode, and try to boost performance while making sure the code compiles and is functionally correct. \n
 """
-def prompt_generate_custom_cuda_correctness(
+
+def gen_first_prompt_correctness(ref_arch_src: str) -> str:
+    """
+    Using prompt example (an element-wise addition) for prompt templates
+    The most basic form of example just to show LLM the task and the expected output format
+    """
+    arch = ref_arch_src
+    # These are strictly defined for now
+
+    # path to prompt template, show an example of Model (torch specifications) and ModelNew (torch + custom CUDA kernels)
+    example_arch_path = os.path.join(
+        REPO_TOP_PATH, f"src/prompts/model_ex_add.py"
+    )
+    example_new_arch_path = os.path.join(
+        REPO_TOP_PATH, f"src/prompts/model_new_ex_add.py"
+    )
+
+    if not os.path.exists(example_arch_path):
+        raise FileNotFoundError(
+            f"Example architecture file not found: {example_arch_path}"
+        )
+    if not os.path.exists(example_new_arch_path):
+        raise FileNotFoundError(
+            f"Example new architecture file not found: {example_new_arch_path}"
+        )
+
+    example_arch = read_file(example_arch_path)
+    example_new_arch = read_file(example_new_arch_path)
+
+    return _gen_first_prompt_correctness(arch, example_arch, example_new_arch)
+
+def _gen_first_prompt_correctness(
     arc_src: str, example_arch_src: str, example_new_arch_src: str
 ) -> str:
     prompt = PROBLEM_STATEMENT
@@ -169,6 +200,12 @@ def prompt_for_optimization(ref_arch_src: str, custom_cuda, cuda_runtime, torch_
     # example_new_arch = read_file(example_new_arch_path)
     gpu_spec_info = read_file(gpu_spec_file_path)
 
+    PROMPT_WITH_QUESTION = f"""Can you think of ways to improve the current kernel implementation to gain speedup? 
+                           What optimizations could you apply? Please realize your ideas."""
+    prompt_with_baseline = ""
+    if torch_runtime >= cuda_runtime * 1.1:
+        prompt_with_baseline = f"There exists a correct implementation with average runtime of {torch_runtime}ms.\n"
+
     prompt = f"""
     {PROBLEM_STATEMENT}
     
@@ -181,14 +218,17 @@ def prompt_for_optimization(ref_arch_src: str, custom_cuda, cuda_runtime, torch_
     {custom_cuda}
     ```
     {PROBLEM_INSTRUCTION_OPTIMIZATION}
-    There exists a correct implementation with average runtime of {torch_runtime}ms.\n
+    {prompt_with_baseline}
     """
     if recommendation:
         prompt += f"""
-        Please try to perform the following optimization, correctly: {recommendation}\n
+        Try to perform the following optimization, correctly: {recommendation}\n
         """
-    if shots:
-        prompt += few_shot_prompt(ref_arch_src, shots)
+        if shots:
+            prompt += few_shot_prompt(ref_arch_src, shots)
+    else:
+        prompt += PROMPT_WITH_QUESTION
+        
     if gpu_name:
         prompt += hardware_info_prompt(gpu_name, gpu_spec_info)
 
@@ -256,6 +296,8 @@ def hardware_info_prompt( gpu_name: str,
 
 
 
+
+# all below are deprecated
 
 PROBLEM_STATEMENT_CLEANED = """You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups.\n\nYou have complete freedom to choose the set of operators you want to replace. You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. You may replace multiple operators with custom implementations, consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), or algorithmic changes (such as online softmax). You are only limited by your imagination.\n
 """

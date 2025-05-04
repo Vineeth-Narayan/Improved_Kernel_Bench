@@ -132,6 +132,7 @@ def load_custom_model(
         exec(model_custom_src, context)
         # DANGER: need to delete refernece from global namespace
     except SyntaxError as e:
+        # error_message = f"{e.msg} at line {e.lineno} col {e.offset}:\n{e.text}"
         print(f"Syntax Error in custom generated code or Compilation Error {e}")
         return None
 
@@ -350,31 +351,34 @@ def eval_kernel_against_ref(
     metadata["device"] = str(device)  # for debugging
 
     # this is where compilation happens
+    # saved_stdout = sys.stdout
+
     try:
         os.environ["TORCH_USE_CUDA_DSA"] = "1"  # compile with device side assertion
         # add hash for later to distinguish between multi-turn kernels
         ModelNew = load_custom_model(custom_model_src, context, build_dir)
         torch.cuda.synchronize(device=device)  # not sure if this is too much
     except Exception as e:
-        print(
-            f"Failed to compile custom CUDA kernel: Record as compilation failure. \nError: {e}"
-        )
+
+        # print(
+        #     f"Failed to compile custom CUDA kernel: Record as compilation failure. \nError: {e}"
+        # )
         # TODO: add metadata for compilation error (how to we get the compilation error message?)
 
         if "lock" in str(e) or "No such file or directory" in str(e):
             # this is a lock file error, likely due to concurrent compilation
             # this does not necessarily mean the compilation failed, but we should retry
-            print(
-                f"[Eval] Lock file error during compilation, Please retry. Error: {e}"
-            )
+            # print(
+            #     f"[Eval] Lock file error during compilation, Please retry. Error: {e}"
+            # )
             graceful_eval_cleanup(context, device)
             return None
-        else:
-            metadata["compilation_error"] = e
+        else:        
+            metadata["compilation_error"] = str(e)
             graceful_eval_cleanup(context, device)
             return KernelExecResult(
                 compiled=False, metadata=metadata
-            )  # skip further steps
+            )  
 
     # at this point we passed compilation
     try:
@@ -434,6 +438,19 @@ def eval_kernel_against_ref(
                     for x in inputs
                 ]
                 model_new = custom_model.cuda(device=device)
+
+                # This is how you can measure reference perf!
+                # import types
+                # def load_module_from_code(code_string):
+                #     module = types.ModuleType("dynamic_module")
+                #     exec(code_string, module.__dict__)
+                #     return module
+                # module = load_module_from_code(original_model_src)
+      
+                # model_new = module.Model().to('cuda')
+                # model_new.eval() 
+                # This is how you can measure reference perf!
+
                 torch.cuda.synchronize(device=device)
 
                 elapsed_times = time_execution_with_cuda_event(
@@ -486,7 +503,7 @@ def register_and_format_exception(
 def time_execution_with_cuda_event(
     kernel_fn: callable,
     *args,
-    num_warmup: int = 3,
+    num_warmup: int = 10,
     num_trials: int = 10,
     verbose: bool = True,
     device: torch.device = None,
@@ -587,13 +604,15 @@ def run_and_check_correctness(
             set_seed(trial_seed)
             model_new = new_model_instance.cuda(device=device)
 
-            output = model(*inputs)
-            torch.cuda.synchronize(device=device)
             # ensure all GPU operations are completed before checking results
 
             try:
                 output_new = model_new(*inputs)
                 torch.cuda.synchronize(device=device)
+                output = model(*inputs)
+                torch.cuda.synchronize(device=device)
+
+
                 if output.shape != output_new.shape:
                     metadata = register_and_format_exception(
                         "correctness_issue",
@@ -613,10 +632,10 @@ def run_and_check_correctness(
                     output, output_new, atol=1e-02, rtol=1e-02
                 ):  # fail
                     max_diff = torch.max(torch.abs(output - output_new)).item()
-                    avg_diff = torch.mean(torch.abs(output - output_new)).item()
+                    # avg_diff = torch.mean(torch.abs(output - output_new)).item()
                     metadata.setdefault("max_difference", []).append(f"{max_diff:.6f}")
-                    metadata.setdefault("avg_difference", []).append(f"{avg_diff:.6f}")
-                    metadata["correctness_issue"] = "Output mismatch"
+                    # metadata.setdefault("avg_difference", []).append(f"{avg_diff:.6f}")
+                    metadata["correctness_issue"] = "correct shape, output value mismatch"
                     if verbose:
                         print(f"[FAIL] trial {trial}: Output mismatch")
                 else:  # pass
@@ -625,7 +644,7 @@ def run_and_check_correctness(
                         print(f"[PASS] trial {trial}: New Model matches Model")
 
             except Exception as e:
-                print("[Error] Exception happens during correctness check")
+                # print("[Error] Exception happens during correctness check")
                 print(f"Error in launching kernel for ModelNew: {e}")
 
                 metadata = register_and_format_exception(
@@ -712,7 +731,7 @@ def check_metadata_serializable_all_types(metadata: dict):
 
 
 def fetch_baseline_time(
-    level_name: str, problem_id: int, dataset: list[str], baseline_time_filepath: str
+    level: int, problem_name: str, baseline_time_filepath: str
 ) -> dict:
     """
     Fetch the baseline time from the time
@@ -725,8 +744,8 @@ def fetch_baseline_time(
     with open(baseline_time_filepath, "r") as f:
         baseline_json = json.load(f)
 
-    problem_name = dataset[problem_id].split("/")[-1]
-    baseline_time = baseline_json[level_name].get(problem_name, None)
+    # problem_name = dataset[problem_id].split("/")[-1]
+    baseline_time = baseline_json[f"level{level}"].get(problem_name+".py", None)
     return baseline_time
 
 

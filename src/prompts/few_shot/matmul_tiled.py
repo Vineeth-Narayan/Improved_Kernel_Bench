@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.cpp_extension import load_inline
 
+# performs a tiled matmul C = A * B
 source = """
 #include <torch/extension.h>
 #include <stdio.h>

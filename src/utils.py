@@ -8,7 +8,6 @@ import re
 import random
 import tempfile
 from pathlib import Path
-import re
 import math
 import os
 import json
@@ -478,6 +477,13 @@ def remove_code_block_header(code, code_language_type):
         code = code[len(code_language_type) :].strip()
     return code
 
+def extract_error_msg(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    end_idx = content.rfind("compilation_end")
+    start_idx = content.rfind("compilation_start", 0, end_idx)
+    return content[start_idx + len("compilation_start"):end_idx]
 
 def extract_first_code(output_string: str, code_language_types: list[str]) -> str:
     """

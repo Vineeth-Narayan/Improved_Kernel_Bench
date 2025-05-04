@@ -9,4 +9,7 @@ results/*
 runs/*
 cache/*
 !results/timing/
+!results/kernels/
+!results/saved_results/
 .env
+private_setup.sh

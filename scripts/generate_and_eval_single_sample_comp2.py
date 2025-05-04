@@ -34,7 +34,7 @@ Generate and evaluate a single sample with iterative compilation fixes
 REPO_TOP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORRECTNESS_SAMPLES = 3
 CORRECTNESS_ITERATIONS = 10
-OPTIMIZATION_SAMPLES = 3
+OPTIMIZATION_SAMPLES = 4
 OPTIMIZATION_ITERATIONS = 10
 
 
@@ -47,16 +47,13 @@ class EvalConfig(Config):
         self.level = REQUIRED
         self.problem_id = REQUIRED
         self.eval_mode = "local"
-        # self.gpu_arch = ["Ampere"]
         self.gpu_arch = ["Turing"]
         self.gpu_name = "T4"
-        # self.server_type = "openai"
         self.server_type ="deepseek"
-        # self.model_name = "o1-mini-2024-09-12"
         self.model_name = "deepseek-coder"
         self.max_tokens = 8192
-        # self.temperature = 0.0
-        self.high_temp = 1.0
+
+        self.high_temp = 0.8
         self.low_temp = 0.0
         self.kernels_dir = os.path.join(REPO_TOP_DIR, "results/kernels")
 
@@ -69,10 +66,7 @@ class EvalConfig(Config):
         self.log_prompt = True
         self.log_generated_kernel = True
         self.log_eval_result = True
-        # self.max_compile_fix_iterations = 3
-        # self.max_correctness_fix_iterations = 10
-        # self.max_optimization_iterations = 10
-        # self.max_optimization_samples = 1
+
     def verbose_logging(self):
         self.log = True
         self.log_prompt = True
@@ -136,7 +130,7 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
                 f.write(custom_cuda_prompt)
 
         # Query Server
-        if iteration == 0 or (iteration > 3 and iteration % 2 == 0): # avoid deterministically stuck in the same issue
+        if iteration == 0 or (iteration > 5 and iteration % 2 == 0): 
             custom_cuda = high_temp_server(custom_cuda_prompt)
         else:
             custom_cuda = low_temp_server(custom_cuda_prompt)
@@ -237,6 +231,8 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
     recommendations = (
     (None, None),
     ("tensorcore", "utilize tensorcore wmma instruction when appropriate"),
+    ("tiling", "tiled matrix multiplication, optimize block/tile size"),
+    (None, "Memory Coalescing")
     )   
     
     best_cuda = initial_cuda
@@ -368,6 +364,7 @@ def main(config: EvalConfig):
     with open(os.path.join(config.logdir, f"correct_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
         f.write(f"# runtime: {correct_runtime}\n")        
         f.write(f"# basline: {baseline_runtime}\n")
+        f.write(f"# speedup: {baseline_runtime / correct_runtime}\n")
         f.write(correct_cuda)
     # or
     # correct_cuda = read_file(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"))
@@ -383,6 +380,7 @@ def main(config: EvalConfig):
     with open(os.path.join(config.logdir, f"optimized_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
         f.write(f"# runtime: {optimized_runtime}\n")        
         f.write(f"# basline: {baseline_runtime}\n")
+        f.write(f"# speedup: {baseline_runtime / optimized_runtime}\n")
         f.write(optimized_cuda)
 
 

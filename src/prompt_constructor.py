@@ -222,7 +222,7 @@ def prompt_for_optimization(ref_arch_src: str, custom_cuda, cuda_runtime, torch_
     """
     if recommendation:
         prompt += f"""
-        Try to perform the following optimization, correctly: {recommendation}\n
+        Try to perform the following optimization, correctly, if you think it's applicable to this problem: {recommendation}\n
         """
         if shots:
             prompt += few_shot_prompt(ref_arch_src, shots)
@@ -247,6 +247,10 @@ def few_shot_prompt(ref_arch_src: str, shots=[]):
         matmul_tensorcore = read_file(matmul_tensorcore_path)
         prompt += f"""tensor core wmma example:\n
         ```{matmul_tensorcore}```\n"""
+    if "tiling" in shots:
+        matmul_tiling = read_file(matmul_tiled_path)
+        prompt += f"""tiled matmul example:\n
+        ```{matmul_tiling}```\n"""
 
     return prompt + "End of examples.\n\n"
 

@@ -112,7 +112,7 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
     final_code = None
     final_runtime = -1
     for iteration in range(max_iterations):
-        print(f"Iteration {iteration + 1}/{max_iterations}: Generating and evaluating kernel")
+        print(f"Iteration {start_at + iteration + 1}/{start_at + max_iterations}: Generating and evaluating kernel")
 
         # Generate Prompt
         if iteration == 0:
@@ -125,7 +125,7 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
 
         # Log Prompt
         if config.log_prompt:
-            prompt_filename = f"prompt_level_{config.level}_problem_{config.problem_id}_iter_{iteration}.txt"
+            prompt_filename = f"prompt_level_{config.level}_problem_{config.problem_id}_iter_{start_at + iteration}.txt"
             with open(os.path.join(log_dir, prompt_filename), "w") as f:
                 f.write(custom_cuda_prompt)
 
@@ -138,17 +138,17 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
 
         # Log response 
         if config.log:
-            kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{iteration}_raw.py"
+            kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{start_at + iteration}_raw.py"
             with open(os.path.join(log_dir, kernel_filename), "w") as f:
                 f.write(custom_cuda)
 
         # extract code       
         custom_cuda = extract_first_code(custom_cuda, ["python", "cpp"])
-        assert custom_cuda is not None, f"Iteration {iteration + 1}: Custom CUDA code generation failed"
+        assert custom_cuda is not None, f"Iteration {start_at + iteration + 1}: Custom CUDA code generation failed"
 
         # Log Generated Kernel
         if config.log:
-            kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{iteration}.py"
+            kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{start_at + iteration}.py"
             with open(os.path.join(log_dir, kernel_filename), "w") as f:
                 f.write(custom_cuda)
 
@@ -181,7 +181,7 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
         # Log Evaluation Result
         if config.log:
             eval_filename = f"eval_result_level_{config.level}_problem_{config.problem_id}.txt"
-            mode = "w" if iteration == 0 else "a"
+            mode = "w" if ((start_at + iteration) == 0) else "a"
             with open(os.path.join(log_dir, eval_filename), mode) as f:
                 f.write(f"Problem Name: {problem_name}\n")
                 f.write(f"Iteration: {iteration + 1 + start_at}\n")
@@ -360,28 +360,31 @@ def main(config: EvalConfig):
     baseline_runtime = baseline_stats["mean"]
     
     correct_cuda, correct_runtime = gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src, problem_name)
-    
-    with open(os.path.join(config.logdir, f"correct_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
-        f.write(f"# runtime: {correct_runtime}\n")        
-        f.write(f"# basline: {baseline_runtime}\n")
-        f.write(f"# speedup: {baseline_runtime / correct_runtime}\n")
-        f.write(correct_cuda)
-    # or
-    # correct_cuda = read_file(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"))
-    optimized_cuda, optimized_runtime = gen_for_optimization(config = config, 
-                                                    initial_cuda = correct_cuda,
-                                                    initial_runtime = correct_runtime, 
-                                                    baseline_runtime = baseline_runtime,
-                                                    high_temp_server = high_temp_server,
-                                                    low_temp_server = low_temp_server, 
-                                                    ref_arch_src = ref_arch_src, 
-                                                    problem_name = problem_name
-                                                    )
-    with open(os.path.join(config.logdir, f"optimized_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
-        f.write(f"# runtime: {optimized_runtime}\n")        
-        f.write(f"# basline: {baseline_runtime}\n")
-        f.write(f"# speedup: {baseline_runtime / optimized_runtime}\n")
-        f.write(optimized_cuda)
+    if correct_cuda:
+        with open(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
+            f.write(f"# runtime: {correct_runtime}\n")        
+            f.write(f"# basline: {baseline_runtime}\n")
+            f.write(f"# speedup: {baseline_runtime / correct_runtime}\n")
+            f.write(correct_cuda)
+        # or
+        # correct_cuda = read_file(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"))
+        optimized_cuda, optimized_runtime = gen_for_optimization(config = config, 
+                                                        initial_cuda = correct_cuda,
+                                                        initial_runtime = correct_runtime, 
+                                                        baseline_runtime = baseline_runtime,
+                                                        high_temp_server = high_temp_server,
+                                                        low_temp_server = low_temp_server, 
+                                                        ref_arch_src = ref_arch_src, 
+                                                        problem_name = problem_name
+                                                        )
+        with open(os.path.join(config.kernels_dir, f"optimized_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
+            f.write(f"# runtime: {optimized_runtime}\n")        
+            f.write(f"# basline: {baseline_runtime}\n")
+            f.write(f"# speedup: {baseline_runtime / optimized_runtime}\n")
+            f.write(optimized_cuda)
+    else:
+        with open(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
+            f.write("failed to generate correct kernel")        
 
 
 if __name__ == "__main__":

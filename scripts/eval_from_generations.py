@@ -1,3 +1,8 @@
+import os
+from sys import path
+path.extend([os.getcwd()])
+
+
 from dataclasses import dataclass
 import shutil
 import time
@@ -57,7 +62,7 @@ class EvalConfig(Config):
 
         # Construct this from mapping from architecture name to torch cuda arch list in the future
         # you can either specify SM version or just use the name
-        self.gpu_arch = ["Ada"]
+        self.gpu_arch = ["Ampere"]
 
         # Logging
         # Top Directory to Store Runs

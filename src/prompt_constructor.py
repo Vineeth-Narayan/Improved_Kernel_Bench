@@ -35,76 +35,22 @@ def get_arch_definition(arch_src):
 ############################################
 # CUDA Prompt
 ############################################
-# PROBLEM_STATEMENT = """You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
-#     You have complete freedom to choose the set of operators you want to replace. You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. You may replace multiple operators with custom implementations, consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), or algorithmic changes (such as online softmax). You are only limited by your imagination.\n
-# """
+PROBLEM_STATEMENT = """You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
+    You have complete freedom to choose the set of operators you want to replace. You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. You may replace multiple operators with custom implementations, consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), or algorithmic changes (such as online softmax). You are only limited by your imagination.\n
+"""
 PROBLEM_INSTRUCTION = """
-Optimize the architecture named Model with custom CUDA operators! Name your optimized output architecture ModelNew. Output the new code in codeblocks. Please generate real code, NOT pseudocode, make sure the code compiles and is fully functional. Just output the new model code, no other text, and NO testing code! \n
+Optimize the architecture named Model with custom CUDA operators! Name your optimized output architecture ModelNew. Output the new code in codeblocks. Please generate real code, NOT pseudocode, make sure the code compiles and is fully functional. Just output the new model code, no other text, and NO testing code! Do not define a PYBIND11_MODULE within the in-line CUDA unless necessary, as this is likely to cause a multiple definition error.\n
 """
 
-PROBLEM_STATEMENT = """You are an expert in CUDA engineering! You write custom CUDA kernels to replace the pytorch operators 
-in the given architecture to get speedups. \n
-    You have complete freedom to choose the set of operators you want to replace. 
-    You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. 
-    You may replace multiple operators with custom implementations, 
-    consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), 
-    or algorithmic changes (such as online softmax).\n
+METADATA_RECEIPT = """
+Your generated architecture ModelNew and kernel was evaluated on GPU and checked against the reference architecture Model.\nHere is the Evaluation Result:
 """
 
-REMINDERS = """Remember to include appropriate import statements in your code (such as import math), 
-and make sure that parentheses in your code are balanced.\n"""
-
-COT_INSTRUCTION = """Please think step by step. Concisely explain your code in comments or in text outside of codeblocks\n"""
-
-# PROBLEM_INSTRUCTION_CORRECTNESS = """
-# Implement the architecture named Model with custom CUDA operators! 
-# Name your optimized output architecture ModelNew. Output the new code in codeblocks. 
-# Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. 
-# Just output the new model code, no other text, and NO testing code! \n
-# """
-PROBLEM_INSTRUCTION_CORRECTNESS = """
-Implement the architecture named Model with custom CUDA operators! 
-Name your output architecture ModelNew. Output the new code in codeblocks. Do NOT generate supplementary code e.g. test code. 
-Please generate real code, NOT pseudocode, make sure the code compiles and is functionally correct. \n
+ITERATE_INSTRUCTION = """
+Name your new improved output architecture ModelNew. Output the new code in codeblocks. Please generate real code, NOT psuedocode, make sure the code compiles and is fully functional. Just output the new modefl code, no other text, and NO testing code!
 """
 
-PROBLEM_INSTRUCTION_OPTIMIZATION = """
-Now, optimize the above ModelNew architecture. Name your optimized output architecture ModelNew. Do not change architecture format.
-Output the new code in codeblocks. Do NOT generate supplementary code e.g. test code. 
-Please generate real code, NOT pseudocode, and try to boost performance while making sure the code compiles and is functionally correct. \n
-"""
-
-def gen_first_prompt_correctness(ref_arch_src: str) -> str:
-    """
-    Using prompt example (an element-wise addition) for prompt templates
-    The most basic form of example just to show LLM the task and the expected output format
-    """
-    arch = ref_arch_src
-    # These are strictly defined for now
-
-    # path to prompt template, show an example of Model (torch specifications) and ModelNew (torch + custom CUDA kernels)
-    example_arch_path = os.path.join(
-        REPO_TOP_PATH, f"src/prompts/model_ex_add.py"
-    )
-    example_new_arch_path = os.path.join(
-        REPO_TOP_PATH, f"src/prompts/model_new_ex_add.py"
-    )
-
-    if not os.path.exists(example_arch_path):
-        raise FileNotFoundError(
-            f"Example architecture file not found: {example_arch_path}"
-        )
-    if not os.path.exists(example_new_arch_path):
-        raise FileNotFoundError(
-            f"Example new architecture file not found: {example_new_arch_path}"
-        )
-
-    example_arch = read_file(example_arch_path)
-    example_new_arch = read_file(example_new_arch_path)
-
-    return _gen_first_prompt_correctness(arch, example_arch, example_new_arch)
-
-def _gen_first_prompt_correctness(
+def prompt_generate_custom_cuda(
     arc_src: str, example_arch_src: str, example_new_arch_src: str
 ) -> str:
     prompt = PROBLEM_STATEMENT
@@ -127,189 +73,67 @@ def _gen_first_prompt_correctness(
     {arc_src}
     ```
     """
-    prompt += PROBLEM_INSTRUCTION_CORRECTNESS + COT_INSTRUCTION + REMINDERS
+    prompt += PROBLEM_INSTRUCTION
     return prompt
 
-
-def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
-    # metadata = metadata[:1000] if len(metadata) > 1000 else metadata
+def prompt_generate_ir_cuda(
+    arc_src: str, example_arch_src: str, example_new_arch_src: str,
+    prev_kernel: str, metadata: str, perf_profile: str
+) -> str:
     prompt = PROBLEM_STATEMENT
-    file_path = os.path.join(REPO_TOP_PATH, "output")
-    # prompt += f""" Below I am attaching the whole history of the stdout with the errors, which might help you in fixing the kernel code looking at the errors:"""
-    # content = ""
-    # with open(file_path, 'r') as file:
-    #     for line in file:
-    #         content += line
-    # prompt += content
-    prompt += f"""
-    The architecture is as follows: 
-    ```
-    {ref_arch_src}
-    ```
-    You generated the following solution and it failed to compile:
-    ```
-    {custom_cuda}
-    ```
-    Here's compilation error message (you may ignore warnings):
-    ```
-    {metadata}
-    ```
-    
-    Please analyze the error and fix the compilation issue in the new model code.
 
-    """
-    return prompt
-
-
-def prompt_fix_correctness(ref_arch_src, custom_cuda, metadata):
-    prompt = PROBLEM_STATEMENT
-    prompt += f"""
-    With the following architecture:
-    ```
-    {ref_arch_src}
-    ```
-    You generated the following solution and it failed correctness:
-    ```
-    {custom_cuda}
-    ```
-    Here's the details of runtime error or correctness feedback:
-    ```
-    {metadata}
-    ```
-    Please consider how your custom CUDA kernels are implemented, how it is different from the reference implementation, 
-    and fix the correctness error in the new model code. Please output the corrected code in codeblocks. Do not generate
-    any other code e.g. test code. 
-    {COT_INSTRUCTION}
-    {REMINDERS}
-    """
-    return prompt
-
-def prompt_for_optimization(ref_arch_src: str, custom_cuda, cuda_runtime, torch_runtime, gpu_name=None, shots=None, recommendation=None):
-    # arch = ref_arch_src
-
-    # example_arch_path = os.path.join(
-    #     REPO_TOP_PATH, f"src/prompts/model_ex_add.py"
-    # )
-    # example_new_arch_path = os.path.join(
-    #     REPO_TOP_PATH, f"src/prompts/model_new_ex_add.py"
-    # )
-
-    gpu_spec_file_path = os.path.join(REPO_TOP_PATH, f"src/prompts/hardware/gpu_specs.py")
-
-    # example_arch = read_file(example_arch_path)
-    # example_new_arch = read_file(example_new_arch_path)
-    gpu_spec_info = read_file(gpu_spec_file_path)
-
-    PROMPT_WITH_QUESTION = f"""Can you think of ways to improve the current kernel implementation to gain speedup? 
-                           What optimizations could you apply? Please realize your ideas."""
-    prompt_with_baseline = ""
-    if torch_runtime >= cuda_runtime * 1.1:
-        prompt_with_baseline = f"There exists a correct implementation with average runtime of {torch_runtime}ms.\n"
-
-    prompt = f"""
-    {PROBLEM_STATEMENT}
-    
-    You are given the following architecture to implement: \n
-    ```
-    {ref_arch_src}
-    ```
-    You generated the following solution, with an average runtime of {cuda_runtime}ms:\n
-    ```
-    {custom_cuda}
-    ```
-    {PROBLEM_INSTRUCTION_OPTIMIZATION}
-    {prompt_with_baseline}
-    """
-    if recommendation:
+    if example_arch_src != "" and example_new_arch_src != "":
         prompt += f"""
-        Try to perform the following optimization, correctly, if you think it's applicable to this problem: {recommendation}\n
+        Here's an example to show you the syntax of inline embedding custom CUDA operators in torch: The example given architecture is: \n
+        ``` \n
+        {example_arch_src}
+        ``` \n
+        The example new arch with custom CUDA kernels looks like this: 
+        ```
+        {example_new_arch_src}
+        ``` \n
         """
-        if shots:
-            prompt += few_shot_prompt(ref_arch_src, shots)
+
+    prompt += f"""
+    You are given the following architecture: \n
+    ```
+    {arc_src}
+    ```
+    """
+    prompt += PROBLEM_INSTRUCTION
+
+    compiled = "compiled=True" in metadata
+    correct = "correctness=True" in metadata
+
+    prompt += f"""
+    Here is your latest generation:
+    """
+    prompt += prev_kernel + '\n'
+
+    prompt += METADATA_RECEIPT + '\n'
+
+    prompt += metadata
+
+    if not compiled:
+        prompt += "Your latest generation was unable to compile. Use the Evaluation Result to determine why, and fix the compilation error in NewModel."
+
+    elif not correct:
+        prompt += "Your latest generation yielded incorrect output. Consider the goal of the kernel from the docstrings in the architecture and the Evaluation Result to determine why a correctness error occurred, and resolve this error in NewModel."
+
     else:
-        prompt += PROMPT_WITH_QUESTION
-        
-    if gpu_name:
-        prompt += hardware_info_prompt(gpu_name, gpu_spec_info)
+        prompt += "Your code compiled and was correct. Now, improve your generated code by optimizing it for execution time by any means necessary. Below is the pytorch performance profile of the kernel during execution to help you determine where to optimize:\n"
+        prompt += perf_profile + '\n'
 
-    return prompt + COT_INSTRUCTION + REMINDERS
-
-    
-
-def few_shot_prompt(ref_arch_src: str, shots=[]):
-       
-    prompt = "Here are examples usage of optimization techniques:\n"
-    example_dir = os.path.join(REPO_TOP_PATH, "src/prompts/few_shot")
-    matmul_tensorcore_path = os.path.join(example_dir, "matmul_tensorcore.py")
-    matmul_tiled_path = os.path.join(example_dir, "matmul_tiled.py")
-    flash_attn_path = os.path.join(example_dir, "flash_sttn.py")
-    if "tensorcore" in shots:
-        matmul_tensorcore = read_file(matmul_tensorcore_path)
-        prompt += f"""tensor core wmma example:\n
-        ```{matmul_tensorcore}```\n"""
-    if "tiling" in shots:
-        matmul_tiling = read_file(matmul_tiled_path)
-        prompt += f"""tiled matmul example:\n
-        ```{matmul_tiling}```\n"""
-
-    return prompt + "End of examples.\n\n"
-
-def hardware_info_prompt( gpu_name: str, 
-                gpu_spec_info_src: str) -> str:
-
-    # Create a dictionary to store the local namespace
-    local_dict = {}
-    
-    # Execute the GPU spec file in the local namespace
-    exec(gpu_spec_info_src, {}, local_dict)
-    
-    # Get the required variables from the local namespace
-    GPU_SPEC_INFO = local_dict.get('GPU_SPEC_INFO')
-    GPU_BEST_PRACTICES = local_dict.get('GPU_BEST_PRACTICES')
-    
-    if not GPU_SPEC_INFO or not GPU_BEST_PRACTICES:
-        raise ValueError("GPU_SPEC_INFO or GPU_BEST_PRACTICES not found in gpu_spec_info_src")
-
-    assert gpu_name in GPU_SPEC_INFO, f"GPU name {gpu_name} not found in GPU_SPEC_INFO"
-    
-    curr_gpu_spec_info = GPU_SPEC_INFO[gpu_name]
-
-    gpu_architecture = curr_gpu_spec_info.get("GPU Architecture")
-    prompt = f"""The GPU that will run the kernel is NVIDIA {gpu_name}, {gpu_architecture} architecture with the following specs\n\n"""
-    
-    for key, value in curr_gpu_spec_info.items():
-        if key == "GPU Architecture":
-            continue
-        prompt += f"""- We have {value} of {key}.\n"""
-    
-    
-    prompt += f"""\n\nHere are some general best practices for writing CUDA kernels: \n\n"""
-    for best_practice in GPU_BEST_PRACTICES:
-        prompt += f"""- {best_practice}\n"""
+    prompt += ITERATE_INSTRUCTION
 
     return prompt
 
-
-
-
-
-
-
-
-
-
-
-
-
-# all below are deprecated
 
 PROBLEM_STATEMENT_CLEANED = """You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups.\n\nYou have complete freedom to choose the set of operators you want to replace. You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. You may replace multiple operators with custom implementations, consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), or algorithmic changes (such as online softmax). You are only limited by your imagination.\n
 """
 PROBLEM_INSTRUCTION_CLEANED = """
-Optimize the architecture named Model with custom CUDA operators! Name your optimized output architecture ModelNew. Output the new code in codeblocks. Please generate real code, NOT pseudocode, make sure the code compiles and is fully functional. Just output the new model code, no other text, and NO testing code! \n
+Optimize the architecture named Model with custom CUDA operators! Name your optimized output architecture ModelNew. Output the new code in codeblocks. Please generate real code, NOT pseudocode, make sure the code compiles and is fully functional. Just output the new model code, no other text, and NO testing code! \n Do not define a PYBIND11_MODULE within the in-line CUDA unless necessary, as this is likely to cause a multiple definition error.
 """
-
-
 
 def prompt_generate_custom_cuda_fewshot_and_template(ref_arch_src: str, shots: list) -> str:
     """
@@ -579,7 +403,37 @@ def prompt_generate_custom_cuda_from_prompt_template(ref_arch_src: str) -> str:
     example_arch = read_file(example_arch_path)
     example_new_arch = read_file(example_new_arch_path)
 
-    return prompt_generate_custom_cuda_correctness(arch, example_arch, example_new_arch)
+    return prompt_generate_custom_cuda(arch, example_arch, example_new_arch)
+
+def generate_ir_prompt(ref_arch_src: str, generated_kernel: str, metadata: str, perf_profile: str) -> str:
+    """
+    Using prompt example (an element-wise addition) for prompt templates
+    The most basic form of example just to show LLM the task and the expected output format
+    """
+    arch = ref_arch_src
+    # These are strictly defined for now
+
+    # path to prompt template, show an example of Model (torch specifications) and ModelNew (torch + custom CUDA kernels)
+    example_arch_path = os.path.join(
+        REPO_TOP_PATH, f"src/prompts/model_ex_add.py"
+    )
+    example_new_arch_path = os.path.join(
+        REPO_TOP_PATH, f"src/prompts/model_new_ex_add.py"
+    )
+
+    if not os.path.exists(example_arch_path):
+        raise FileNotFoundError(
+            f"Example architecture file not found: {example_arch_path}"
+        )
+    if not os.path.exists(example_new_arch_path):
+        raise FileNotFoundError(
+            f"Example new architecture file not found: {example_new_arch_path}"
+        )
+
+    example_arch = read_file(example_arch_path)
+    example_new_arch = read_file(example_new_arch_path)
+
+    return prompt_generate_ir_cuda(arch, example_arch, example_new_arch, generated_kernel, metadata, perf_profile)
 
 
 def prompt_generate_prompt_with_hardware_info_from_template(ref_arch_src: str, gpu_name: str) -> str:
@@ -696,6 +550,46 @@ Here are some best practices for writing CUDA kernels on GPU: \n\n"""
 
 
 
+
+def prompt_fix_compile(ref_arch_src, custom_cuda, metadata):
+    prompt = PROBLEM_STATEMENT
+    prompt += f"""
+    With the following architecture:
+    ```
+    {ref_arch_src}
+    ```
+    You generated the following solution and it failed to compile:
+    ```
+    {custom_cuda}
+    ```
+    Here's the metadata of the compilation error:
+    ```
+    {metadata}
+    ```
+    
+    Please fix the compilation error in the new model code. Please output the corrected code in codeblocks.
+    """
+    return prompt
+
+
+def prompt_fix_correctness(ref_arch_src, custom_cuda, metadata):
+    prompt = PROBLEM_STATEMENT
+    prompt += f"""
+    With the following architecture:
+    ```
+    {ref_arch_src}
+    ```
+    You generated the following solution and it failed correctness:
+    ```
+    {custom_cuda}
+    ```
+    Here's the metadata of the correctness error:
+    ```
+    {metadata}
+    ```
+    Please consider how your custom CUDA kernels are implemented, how it is different from the reference implementation, and fix the correctness error in the new model code. Please output the corrected code in codeblocks.
+    """
+    return prompt
 
 def main():
     gpu_name = "L40S"

@@ -15,6 +15,7 @@ from io import StringIO
 import sys
 
 from . import utils
+from typing import Union, Dict, Any, Optional
 
 REPO_TOP_PATH = os.path.abspath(
     os.path.join(
@@ -132,7 +133,6 @@ def load_custom_model(
         exec(model_custom_src, context)
         # DANGER: need to delete refernece from global namespace
     except SyntaxError as e:
-        # error_message = f"{e.msg} at line {e.lineno} col {e.offset}:\n{e.text}"
         print(f"Syntax Error in custom generated code or Compilation Error {e}")
         return None
 
@@ -205,7 +205,7 @@ def build_compile_cache_legacy(
     except Exception as e:
         print(f"[Compilation] Failed to compile custom CUDA kernel. Unable to cache, \nError: {e}")
         return False, stdout_buffer.getvalue(), str(e)
-    
+
     return True, stdout_buffer.getvalue(), None
 
 
@@ -285,7 +285,7 @@ def build_compile_cache_with_capturing(
     if verbose:
         print("[CPU Precompile] return code: ", returncode)
         print("[CPU Precompile] stdout: \n", stdout.decode('utf-8'))
-        print("[CPU Precompile] stderr: \n", stderr.decode('utf-8')) 
+        print("[CPU Precompile] stderr: \n", stderr.decode('utf-8'))
 
     return returncode, stdout.decode('utf-8'), stderr.decode('utf-8')
 
@@ -351,34 +351,31 @@ def eval_kernel_against_ref(
     metadata["device"] = str(device)  # for debugging
 
     # this is where compilation happens
-    # saved_stdout = sys.stdout
-
     try:
         os.environ["TORCH_USE_CUDA_DSA"] = "1"  # compile with device side assertion
         # add hash for later to distinguish between multi-turn kernels
         ModelNew = load_custom_model(custom_model_src, context, build_dir)
         torch.cuda.synchronize(device=device)  # not sure if this is too much
     except Exception as e:
-
-        # print(
-        #     f"Failed to compile custom CUDA kernel: Record as compilation failure. \nError: {e}"
-        # )
+        print(
+            f"Failed to compile custom CUDA kernel: Record as compilation failure. \nError: {e}"
+        )
         # TODO: add metadata for compilation error (how to we get the compilation error message?)
 
         if "lock" in str(e) or "No such file or directory" in str(e):
             # this is a lock file error, likely due to concurrent compilation
             # this does not necessarily mean the compilation failed, but we should retry
-            # print(
-            #     f"[Eval] Lock file error during compilation, Please retry. Error: {e}"
-            # )
+            print(
+                f"[Eval] Lock file error during compilation, Please retry. Error: {e}"
+            )
             graceful_eval_cleanup(context, device)
             return None
-        else:        
-            metadata["compilation_error"] = str(e)
+        else:
+            metadata["compilation_error"] = e
             graceful_eval_cleanup(context, device)
             return KernelExecResult(
                 compiled=False, metadata=metadata
-            )  
+            )  # skip further steps
 
     # at this point we passed compilation
     try:
@@ -438,19 +435,6 @@ def eval_kernel_against_ref(
                     for x in inputs
                 ]
                 model_new = custom_model.cuda(device=device)
-
-                # This is how you can measure reference perf!
-                # import types
-                # def load_module_from_code(code_string):
-                #     module = types.ModuleType("dynamic_module")
-                #     exec(code_string, module.__dict__)
-                #     return module
-                # module = load_module_from_code(original_model_src)
-      
-                # model_new = module.Model().to('cuda')
-                # model_new.eval() 
-                # This is how you can measure reference perf!
-
                 torch.cuda.synchronize(device=device)
 
                 elapsed_times = time_execution_with_cuda_event(
@@ -474,11 +458,180 @@ def eval_kernel_against_ref(
     graceful_eval_cleanup(context, device)
     return kernel_exec_result
 
+def profile_kernel_against_ref(
+    original_model_src: str,
+    custom_model_src: str,
+    seed_num: int = 42,
+    num_correct_trials: int = 1,
+    num_perf_trials: int = 10,
+    verbose: bool = False,
+    build_dir: os.PathLike = None,
+    device: torch.device = torch.cuda.current_device() if torch.cuda.is_available() else None, # have to run on GPU
+    profile_log_dir: os.PathLike = None
+) -> tuple[KernelExecResult | None, torch.profiler.profile | None]:
+    """
+    Evaluate the custom kernel against the original model
+
+    num_correct_trials: number of trials to initialize different random inputs; correctness pass only if all trials pass
+    num_perf_trials: run the evalutation many times to take the average
+    device: GPU (cuda) device to run the evalutation on
+    """
+    # TODO: check device is busy
+    assert torch.cuda.is_available(), "CUDA is not available, cannot run Eval"
+    torch.set_printoptions(
+        precision=4,  # Decimal places
+        threshold=10,  # Total number of elements before truncating
+        edgeitems=3,  # Number of elements at beginning and end of dimensions
+        linewidth=80,  # Maximum width before wrapping
+    )
+
+    # set CUDA device
+    torch.cuda.set_device(device)
+
+    context = {}
+
+    if verbose:
+        print(f"[Eval] Start Evalulation! on device: {device}")
+        print("[Eval] Loading Original Model")
+
+    Model, get_init_inputs, get_inputs = load_original_model_and_inputs(
+        original_model_src, context
+    )
+    set_seed(seed_num)  # set seed for reproducible input
+    init_inputs = get_init_inputs()
+    init_inputs = [
+        x.cuda(device=device) if isinstance(x, torch.Tensor) else x for x in init_inputs
+    ]
+
+    with torch.no_grad():
+        set_seed(seed_num)  # set seed for reproducible weights
+        original_model = Model(*init_inputs)
+        assert hasattr(original_model, "forward")
+        if verbose:
+            print("[Eval] Original Model Loaded")
+    if verbose:
+        print("[Eval] Loading and Compiling New Model with Custom CUDA Kernel")
+
+    metadata = {}  # for storing result metadata
+    metadata["hardware"] = torch.cuda.get_device_name(device=device)
+    metadata["device"] = str(device)  # for debugging
+
+    # this is where compilation happens
+    try:
+        os.environ["TORCH_USE_CUDA_DSA"] = "1"  # compile with device side assertion
+        # add hash for later to distinguish between multi-turn kernels
+        ModelNew = load_custom_model(custom_model_src, context, build_dir)
+        torch.cuda.synchronize(device=device)  # not sure if this is too much
+        assert ModelNew is not None
+    except Exception as e:
+        print(
+            f"Failed to compile custom CUDA kernel: Record as compilation failure. \nError: {e}"
+        )
+        # TODO: add metadata for compilation error (how to we get the compilation error message?)
+
+        if "lock" in str(e) or "No such file or directory" in str(e):
+            # this is a lock file error, likely due to concurrent compilation
+            # this does not necessarily mean the compilation failed, but we should retry
+            print(
+                f"[Eval] Lock file error during compilation, Please retry. Error: {e}"
+            )
+            graceful_eval_cleanup(context, device)
+            return None,None
+        else:
+            metadata["compilation_error"] = e
+            graceful_eval_cleanup(context, device)
+            return KernelExecResult(
+                compiled=False, metadata=metadata
+            ), None  # skip further steps
+
+    # at this point we passed compilation
+    try:
+        with torch.no_grad():
+            set_seed(seed_num)  # set seed for reproducible weights
+            custom_model = ModelNew(*init_inputs)
+            assert hasattr(custom_model, "forward")
+            torch.cuda.synchronize(device=device)
+        if verbose:
+            print("[Eval] New Model with Custom CUDA Kernel Loaded")
+    except (RuntimeError,TypeError) as e:
+        print(
+            f"Failed to load custom CUDA kernel; Compiled but not able to run, count as runtime error. \nError: {e}"
+        )
+        # TODO: add metadata for runtime error e.g. error in launching kernel, illegal memory access, ...
+        graceful_eval_cleanup(context, device)
+        metadata["runtime_error"] = e
+        return KernelExecResult(
+            compiled=True, correctness=False, metadata=metadata
+        ), None  # skip further steps
+
+    kernel_exec_result = None
+
+    # Check Correctness
+    if verbose:
+        print("[Eval] Checking Correctness")
+    try:
+        kernel_exec_result = run_and_check_correctness(
+            original_model,
+            custom_model,
+            get_inputs,
+            metadata=metadata,
+            num_correct_trials=num_correct_trials,
+            verbose=verbose,
+            seed=seed_num,
+            device=device,
+        )
+    except Exception as e:
+        # TODO: add metadata for runtime error e.g. error in launching kernel, illegal memory access, ...
+        metadata["runtime_error"] = e
+        kernel_exec_result = KernelExecResult(
+            compiled=True, correctness=False, metadata=metadata
+        )
+
+    # Measure Performance [Optional] | conditioned on compilation + correctness + no exception so far
+    profiler: torch.profiler.profile | None = None
+    try:
+        if kernel_exec_result and kernel_exec_result.correctness:
+            if verbose:
+                print("[Eval] Measuring Performance as Sample is Correct")
+
+            torch.cuda.synchronize(device=device)
+            set_seed(seed_num)
+            inputs = get_inputs()
+            inputs = [
+                x.cuda(device=device) if isinstance(x, torch.Tensor) else x
+                for x in inputs
+            ]
+            model_new = custom_model.cuda(device=device)
+            torch.cuda.synchronize(device=device)
+
+            elapsed_times, profiler = profile_execution_with_cuda_event(
+                model_new,
+                *inputs,
+                num_trials=num_perf_trials,
+                verbose=verbose,
+                device=device,
+                profile_log_dir=str(profile_log_dir)
+            )
+            runtime_stats = get_timing_stats(elapsed_times, device=device)
+
+            if verbose:
+                print(f"[Eval] Performance Stats: {runtime_stats}")
+            kernel_exec_result.runtime = runtime_stats["mean"]
+            kernel_exec_result.runtime_stats = runtime_stats
+    except Exception as e:
+        if verbose:
+            print(f"[Eval] Error in Measuring Performance: {e}")
+        kernel_exec_result.metadata["error_during_performance"] = e
+
+    graceful_eval_cleanup(context, device)
+    return kernel_exec_result, profiler
 
 def register_and_format_exception(
     exception_type: str,
-    exception_msg: Exception | str,
-    metadata: dict,
+    # exception_msg: Exception | str,
+    # metadata: dict,
+    exception_msg: Union[Exception, str], # Changed from Exception | str
+    metadata: Dict[Any, Any],
     verbose: bool = False,
     truncate=False,
     max_length=200,
@@ -499,11 +652,10 @@ def register_and_format_exception(
 
     return metadata
 
-
 def time_execution_with_cuda_event(
     kernel_fn: callable,
     *args,
-    num_warmup: int = 10,
+    num_warmup: int = 3,
     num_trials: int = 10,
     verbose: bool = True,
     device: torch.device = None,
@@ -557,6 +709,80 @@ def time_execution_with_cuda_event(
 
     return elapsed_times
 
+def profile_execution_with_cuda_event(
+    kernel_fn: callable,
+    *args,
+    num_warmup: int = 3,
+    num_trials: int = 10,
+    verbose: bool = True,
+    device: torch.device = None,
+    profile_log_dir: str = f"{REPO_TOP_PATH}/results/eval_logs/profiler_log",
+) -> tuple[list[float], Optional[torch.profiler.profile]]:
+    """
+    Time a CUDA kernel function over multiple trials using torch.cuda.Event
+
+    Args:
+        kernel_fn: Function to time
+        *args: Arguments to pass to kernel_fn
+        num_trials: Number of timing trials to run
+        verbose: Whether to print per-trial timing info
+        device: CUDA device to use, if None, use current device
+        profile_log_dir: Path where profiler log/trace will be stored
+
+    Returns:
+        List of elapsed times in milliseconds
+    """
+    if device is None:
+        if verbose:
+            print(f"Using current device: {torch.cuda.current_device()}")
+        device = torch.cuda.current_device()
+
+    # Warm ups
+    for _ in range(num_warmup):
+        kernel_fn(*args)
+        torch.cuda.synchronize(device=device)
+
+    print(
+        f"[Profiling] Using device: {device} {torch.cuda.get_device_name(device)}, warm up {num_warmup}, trials {num_trials}"
+    )
+    elapsed_times = []
+    profiler = torch.profiler.profile(
+        schedule=torch.profiler.schedule(wait=0, warmup=1, active=num_trials),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(profile_log_dir),
+        record_shapes=True,
+        with_stack=True,
+        with_flops=True,
+        profile_memory=True,
+    )
+    profiler.start() #__enter__()
+
+    # Actual trials
+    for trial in range(num_trials):
+        # create event marker default is not interprocess
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+
+        start_event.record()
+        kernel_fn(*args)
+        end_event.record()
+
+        # Synchronize to ensure the events have completed
+        torch.cuda.synchronize(device=device)
+
+        # Calculate the elapsed time in milliseconds
+        elapsed_time_ms = start_event.elapsed_time(end_event)
+        if verbose:
+            print(f"Trial {trial + 1}: {elapsed_time_ms:.3g} ms")
+        elapsed_times.append(elapsed_time_ms)
+
+        profiler.step()
+
+    profiler.stop() #__exit__(None, None, None)
+
+    return elapsed_times, profiler
+
+
+
 
 def run_and_check_correctness(
     original_model_instance: nn.Module,
@@ -604,15 +830,13 @@ def run_and_check_correctness(
             set_seed(trial_seed)
             model_new = new_model_instance.cuda(device=device)
 
+            output = model(*inputs)
+            torch.cuda.synchronize(device=device)
             # ensure all GPU operations are completed before checking results
 
             try:
                 output_new = model_new(*inputs)
                 torch.cuda.synchronize(device=device)
-                output = model(*inputs)
-                torch.cuda.synchronize(device=device)
-
-
                 if output.shape != output_new.shape:
                     metadata = register_and_format_exception(
                         "correctness_issue",
@@ -632,10 +856,10 @@ def run_and_check_correctness(
                     output, output_new, atol=1e-02, rtol=1e-02
                 ):  # fail
                     max_diff = torch.max(torch.abs(output - output_new)).item()
-                    # avg_diff = torch.mean(torch.abs(output - output_new)).item()
+                    avg_diff = torch.mean(torch.abs(output - output_new)).item()
                     metadata.setdefault("max_difference", []).append(f"{max_diff:.6f}")
-                    # metadata.setdefault("avg_difference", []).append(f"{avg_diff:.6f}")
-                    metadata["correctness_issue"] = "correct shape, output value mismatch"
+                    metadata.setdefault("avg_difference", []).append(f"{avg_diff:.6f}")
+                    metadata["correctness_issue"] = "Output mismatch"
                     if verbose:
                         print(f"[FAIL] trial {trial}: Output mismatch")
                 else:  # pass
@@ -644,7 +868,7 @@ def run_and_check_correctness(
                         print(f"[PASS] trial {trial}: New Model matches Model")
 
             except Exception as e:
-                # print("[Error] Exception happens during correctness check")
+                print("[Error] Exception happens during correctness check")
                 print(f"Error in launching kernel for ModelNew: {e}")
 
                 metadata = register_and_format_exception(
@@ -731,7 +955,7 @@ def check_metadata_serializable_all_types(metadata: dict):
 
 
 def fetch_baseline_time(
-    level: int, problem_name: str, baseline_time_filepath: str
+    level_name: str, problem_id: int, dataset: list[str], baseline_time_filepath: str
 ) -> dict:
     """
     Fetch the baseline time from the time
@@ -744,8 +968,8 @@ def fetch_baseline_time(
     with open(baseline_time_filepath, "r") as f:
         baseline_json = json.load(f)
 
-    # problem_name = dataset[problem_id].split("/")[-1]
-    baseline_time = baseline_json[f"level{level}"].get(problem_name+".py", None)
+    problem_name = dataset[problem_id].split("/")[-1]
+    baseline_time = baseline_json[level_name].get(problem_name, None)
     return baseline_time
 
 
@@ -774,6 +998,105 @@ def get_timing_stats(elapsed_times: list[float], device: torch.device = None) ->
 
     return stats
 
+def get_memory_usage(profiler):
+    """
+    Extract memory usage information from the profiler.
+    """
+    memory_stats = {}
+    for event in profiler.key_averages():
+        if 'cuda' in event.key:
+            memory_stats[event.key] = {
+                'cpu_memory_allocated': event.cpu_memory_allocated,
+                'cpu_memory_reserved': event.cpu_memory_reserved,
+                'cuda_memory_allocated': event.cuda_memory_allocated,
+                'cuda_memory_reserved': event.cuda_memory_reserved,
+            }
+    return memory_stats
+
+
+def get_kernel_launch_info(profiler):
+    """
+    Extract kernel launch statistics such as execution times for individual kernels.
+    """
+    kernel_info = {}
+    for event in profiler.key_averages():
+        if 'cuda' in event.key:
+            kernel_info[event.key] = {
+                'cpu_time': event.cpu_time,
+                'cuda_time': event.cuda_time,
+                'kernel_launch_time': event.cuda_launch_time,
+            }
+    return kernel_info
+
+
+def get_thread_block_utilization(profiler):
+    """
+    Extract thread/block utilization statistics.
+    """
+    thread_block_utilization = {}
+    for event in profiler.key_averages():
+        if 'cuda' in event.key:
+            thread_block_utilization[event.key] = {
+                'threads_per_block': event.threads_per_block,
+                'blocks_launched': event.blocks_launched,
+                'warps_launched': event.warps_launched,
+            }
+    return thread_block_utilization
+
+
+def get_sync_info(profiler):
+    """
+    Extract synchronization overhead information.
+    """
+    sync_info = {}
+    for event in profiler.key_averages():
+        if 'sync' in event.key:
+            sync_info[event.key] = {
+                'sync_time': event.sync_time,
+                'sync_count': event.sync_count,
+            }
+    return sync_info
+
+
+def get_memory_access_patterns(profiler):
+    """
+    Extract memory access patterns such as coalesced and bank conflicts.
+    """
+    memory_access_patterns = {}
+    for event in profiler.key_averages():
+        if 'memory' in event.key:
+            memory_access_patterns[event.key] = {
+                'global_memory_access': event.global_memory_access,
+                'shared_memory_access': event.shared_memory_access,
+                'coalesced_access': event.coalesced_access,
+                'bank_conflicts': event.bank_conflicts,
+            }
+    return memory_access_patterns
+
+
+def organize_profiler_data(profiler: torch.profiler.profile | None):
+    """
+    Organize the profiler data into a dictionary format that contains useful information.
+
+    Args:
+        profiler (torch.profiler.profile): The PyTorch profiler instance.
+
+    Returns:
+        dict: Organized data from the profiler instance.
+    """
+
+    if profiler is None:
+        return {}
+
+    """organized_data = {}
+
+    organized_data['memory_usage'] = get_memory_usage(profiler)
+    organized_data['kernel_launch_info'] = get_kernel_launch_info(profiler)
+    organized_data['thread_block_utilization'] = get_thread_block_utilization(profiler)
+    organized_data['sync_info'] = get_sync_info(profiler)
+    organized_data['memory_access_patterns'] = get_memory_access_patterns(profiler)"""
+
+    return profiler.key_averages().table()
 
 # if __name__ == "__main__":
 # fetch_kernel_from_database("kernelbench_prompt_v2_level_2", 1, 1, "http://localhost:9091")

@@ -1,3 +1,60 @@
+# Improved KernelBench
+
+## Configuration
+
+The following are configurable hyperparameters defined at the top of `scripts/generate_single_problem.py`:
+```python
+CORRECTNESS_SAMPLES = 5
+CORRECTNESS_ITERATIONS = 5
+OPTIMIZATION_SAMPLES = 3
+OPTIMIZATION_ITERATIONS = 8
+```
+Note: with the above configuration, with our experience, expect the optimization to take a long time
+
+
+Change the following (line 32-35 in `scripts/generate_single_problem.py`) to match your environment: 
+```python
+self.gpu_arch = ["Turing"]
+self.gpu_name = "T4"
+self.server_type = "deepseek"
+self.model_name = "deepseek-coder"
+```
+
+## Usage
+
+1. **Setup**  
+   ```bash
+   ./setup.sh
+   ```
+
+2. **Set your API key**  
+   Using deepseek as example
+   ```bash
+   export DEEPSEEK_API_KEY=<your_api_key>
+   ```
+
+3. **Run generation**  
+   - For a single problem:  
+     ```bash
+     ./single_kernel_runs.sh <level_id> <problem_id>
+     ```
+   - For all problems used in the report:  
+     ```bash
+     ./test.sh
+     ```
+
+Generated results will be saved in:
+
+```
+results/kernels/
+```
+Prompts and LLM responses will be dumped to:
+```
+results/eval_logs/
+```
+
+
+
 # KernelBench - Can LLMs Write GPU Kernels?
 [blog post](https://scalingintelligence.stanford.edu/blogs/kernelbench/) | [HuggingFace Dataset](https://huggingface.co/datasets/ScalingIntelligence/KernelBench) | [arXiv](https://arxiv.org/html/2502.10517v1)
 

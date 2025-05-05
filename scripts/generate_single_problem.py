@@ -12,24 +12,6 @@ from src.utils import extract_first_code, extract_error_msg, query_server, set_g
 """
 Generate and evaluate a single sample with iterative compilation fixes
 """
-# NOTE: gen_for_correctness function is the main part. working on gen_for_optimization
-#       output must be redirected to config.output_dir/output_{problem_id}  
-#       to fetch compilation error msg, I printed out "compilation_start" at the start of eval_kernel_against_ref
-#       and "compilation_end" when it returns. extract_error_msg() function searches for the last appearance of "compilation_end"
-#       and "compilation_start" in the output file, and return the text (which is the compilation error msg) in between.
-#        
-# IDEAS: CoT (make LLMs add comments and explain what it does step by step) [DONE]
-#       Temperature tuning. (alternate between high and low temp?) --> 
-#       [IMPORTANT] still need to give the last history to avoid stuck in loop!! a serious issue especially debugging wmma
-#       start over if iterations don't help?  --> have a "for s in range (max_samples)" outer loop [TODO]
-#       less cringy and more concise prompts [DONE]
-#       add common mistake reminders [DONE but always IN PROGRESS]
-#       sample high level rec and few shot example [IN PROGRESS, only wmma now]
-#       hw info [DONE], doesn't seem too helpful
-
-# TODO:  right now, optimization loop only tries out wmma, not nearly finished
-#       more flexible logging in correctness loop, specifically, seperate correctness logs and optimization logs
-#       
 
 REPO_TOP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORRECTNESS_SAMPLES = 5
@@ -80,7 +62,7 @@ def get_fix_prompts(config, kernel_exec_result, ref_arch_src, custom_cuda, compi
     metadata = kernel_exec_result if (isinstance(kernel_exec_result, dict)) else kernel_exec_result.metadata
     error_metadata = "NONE"
     if not compiled:
-        path = os.path.join(config.output_dir, f"output_{config.problem_id}")
+        path = os.path.join(config.output_dir, f"output_{config.level}_{config.problem_id}")
         error_metadata = extract_error_msg(path) + "\n" + metadata["compilation_error"]
         custom_cuda_prompt = prompt_fix_compile(ref_arch_src, custom_cuda, error_metadata)
 

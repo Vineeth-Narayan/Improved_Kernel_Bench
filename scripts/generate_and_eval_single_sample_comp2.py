@@ -129,24 +129,26 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
             with open(os.path.join(log_dir, prompt_filename), "w") as f:
                 f.write(custom_cuda_prompt)
 
+        custom_cuda = None
+        while not custom_cuda:
         # Query Server
-        if iteration == 0 or (iteration > 5 and iteration % 2 == 0): 
-            custom_cuda = high_temp_server(custom_cuda_prompt)
-        else:
-            custom_cuda = low_temp_server(custom_cuda_prompt)
+            if iteration == 0 or (iteration > 5 and iteration % 2 == 0): 
+                custom_cuda = high_temp_server(custom_cuda_prompt)
+            else:
+                custom_cuda = low_temp_server(custom_cuda_prompt)
 
 
-        # Log response 
-        if config.log:
-            kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{start_at + iteration}_raw.py"
-            with open(os.path.join(log_dir, kernel_filename), "w") as f:
-                f.write(custom_cuda)
+            # Log response 
+            if config.log:
+                kernel_filename = f"generated_kernel_level_{config.level}_problem_{config.problem_id}_iter_{start_at + iteration}_raw.py"
+                with open(os.path.join(log_dir, kernel_filename), "w") as f:
+                    f.write(custom_cuda)
 
-        # extract code       
-        custom_cuda = extract_first_code(custom_cuda, ["python", "cpp"])
-        # if custom_cuda == None:
-        #     custom_cuda = "no_code_output"
-        assert custom_cuda is not None, f"Iteration {start_at + iteration + 1}: Custom CUDA code generation failed"
+            # extract code       
+            custom_cuda = extract_first_code(custom_cuda, ["python", "cpp"])
+            # if custom_cuda == None:
+            #     custom_cuda = "no_code_output"
+            # assert custom_cuda is not None, f"Iteration {start_at + iteration + 1}: Custom CUDA code generation failed"
 
         # Log Generated Kernel
         if config.log:

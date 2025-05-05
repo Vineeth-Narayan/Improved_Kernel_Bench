@@ -13,3 +13,4 @@ cache/*
 !results/saved_results/
 .env
 private_setup.sh
+sakana_test/cuda

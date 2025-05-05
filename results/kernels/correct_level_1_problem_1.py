@@ -1,3 +1,6 @@
+# runtime: 24.4
+# basline: 4.01
+# speedup: 0.16434426229508198
 import torch
 import torch.nn as nn
 from torch.utils.cpp_extension import load_inline
@@ -7,82 +10,60 @@ matmul_source = """
 #include <torch/extension.h>
 #include <cuda_runtime.h>
 
-// Using block size of 16x16 (256 threads per block)
-const int BLOCK_SIZE = 16;
-
+// Tiled matrix multiplication kernel with shared memory
+template <int TILE_SIZE>
 __global__ void matmul_kernel(const float* A, const float* B, float* C, int N) {
-    // Block index
-    int bx = blockIdx.x;
-    int by = blockIdx.y;
+    // Shared memory for tiles of A and B
+    __shared__ float As[TILE_SIZE][TILE_SIZE];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
     
-    // Thread index
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
     
-    // Index of the first sub-matrix of A processed by the block
-    int aBegin = N * BLOCK_SIZE * by;
-    // Index of the last sub-matrix of A processed by the block
-    int aEnd = aBegin + N - 1;
-    // Step size used to iterate through the sub-matrices of A
-    int aStep = BLOCK_SIZE;
+    float sum = 0.0f;
     
-    // Index of the first sub-matrix of B processed by the block
-    int bBegin = BLOCK_SIZE * bx;
-    // Step size used to iterate through the sub-matrices of B
-    int bStep = BLOCK_SIZE * N;
-    
-    // Csub is used to store the element of the block sub-matrix
-    // that is computed by the thread
-    float Csub = 0;
-    
-    // Shared memory for sub-matrices of A and B
-    __shared__ float As[BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float Bs[BLOCK_SIZE][BLOCK_SIZE];
-    
-    // Loop over all the sub-matrices of A and B
-    // required to compute the block sub-matrix
-    for (int a = aBegin, b = bBegin; a <= aEnd; a += aStep, b += bStep) {
-        // Load the matrices from device memory to shared memory
-        // each thread loads one element of each matrix
-        As[ty][tx] = A[a + N * ty + tx];
-        Bs[ty][tx] = B[b + N * ty + tx];
-        
-        // Synchronize to make sure the matrices are loaded
-        __syncthreads();
-        
-        // Multiply the two matrices together;
-        // each thread computes one element of the block sub-matrix
-        for (int k = 0; k < BLOCK_SIZE; ++k) {
-            Csub += As[ty][k] * Bs[k][tx];
+    // Loop over tiles
+    for (int t = 0; t < N; t += TILE_SIZE) {
+        // Load tile from A into shared memory
+        if (row < N && (t + threadIdx.x) < N) {
+            As[threadIdx.y][threadIdx.x] = A[row * N + (t + threadIdx.x)];
+        } else {
+            As[threadIdx.y][threadIdx.x] = 0.0f;
         }
         
-        // Synchronize to make sure that the preceding
-        // computation is done before loading two new
-        // sub-matrices of A and B in the next iteration
+        // Load tile from B into shared memory
+        if ((t + threadIdx.y) < N && col < N) {
+            Bs[threadIdx.y][threadIdx.x] = B[(t + threadIdx.y) * N + col];
+        } else {
+            Bs[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+        
+        __syncthreads();
+        
+        // Compute partial product for this tile
+        for (int k = 0; k < TILE_SIZE; ++k) {
+            sum += As[threadIdx.y][k] * Bs[k][threadIdx.x];
+        }
+        
         __syncthreads();
     }
     
-    // Write the block sub-matrix to device memory;
-    // each thread writes one element
-    int c = N * BLOCK_SIZE * by + BLOCK_SIZE * bx;
-    C[c + N * ty + tx] = Csub;
+    // Write result to output
+    if (row < N && col < N) {
+        C[row * N + col] = sum;
+    }
 }
 
 torch::Tensor matmul_cuda(torch::Tensor A, torch::Tensor B) {
-    // Check inputs
-    TORCH_CHECK(A.dim() == 2, "A must be 2D");
-    TORCH_CHECK(B.dim() == 2, "B must be 2D");
-    TORCH_CHECK(A.size(1) == B.size(0), "Matrix dimensions must match for multiplication");
-    
     int N = A.size(0);
     auto C = torch::zeros({N, N}, A.options());
     
-    // Configure grid and block dimensions
-    dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
-    dim3 blocks((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    // Using 16x16 tiles (can be tuned for specific hardware)
+    const int TILE_SIZE = 16;
+    dim3 block_size(TILE_SIZE, TILE_SIZE);
+    dim3 grid_size((N + TILE_SIZE - 1) / TILE_SIZE, (N + TILE_SIZE - 1) / TILE_SIZE);
     
-    // Launch kernel
-    matmul_kernel<<<blocks, threads>>>(A.data_ptr<float>(), B.data_ptr<float>(), C.data_ptr<float>(), N);
+    matmul_kernel<TILE_SIZE><<<grid_size, block_size>>>(A.data_ptr<float>(), B.data_ptr<float>(), C.data_ptr<float>(), N);
     
     return C;
 }
@@ -98,13 +79,10 @@ matmul_cuda = load_inline(
     functions=["matmul_cuda"],
     verbose=True,
     extra_cflags=["-O3"],
-    extra_ldflags=[""],
+    extra_ldflags=["-lcublas"],
 )
 
 class ModelNew(nn.Module):
-    """
-    Optimized model using custom CUDA kernel for matrix multiplication.
-    """
     def __init__(self):
         super(ModelNew, self).__init__()
         self.matmul_cuda = matmul_cuda
@@ -112,11 +90,11 @@ class ModelNew(nn.Module):
     def forward(self, A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
         """
         Performs the matrix multiplication using custom CUDA kernel.
-
+        
         Args:
             A (torch.Tensor): Input matrix A of shape (N, N).
             B (torch.Tensor): Input matrix B of shape (N, N).
-
+            
         Returns:
             torch.Tensor: Output matrix C of shape (N, N).
         """
@@ -125,8 +103,8 @@ class ModelNew(nn.Module):
 N = 2048
 
 def get_inputs():
-    A = torch.randn(N, N, device='cuda')
-    B = torch.randn(N, N, device='cuda')
+    A = torch.randn(N, N).cuda()
+    B = torch.randn(N, N).cuda()
     return [A, B]
 
 def get_init_inputs():

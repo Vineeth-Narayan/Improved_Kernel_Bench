@@ -1,38 +1,39 @@
-# runtime: 0.204
-# basline: 0.0396
-# speedup: 0.19411764705882356
+# Problem Name: 51_Argmax_over_a_dimension
+# optimized kernel after 3 iterations
+# runtime: 0.0863
+# baseline: 0.0396
 import torch
 import torch.nn as nn
 from torch.utils.cpp_extension import load_inline
 
-# Define the custom CUDA kernel for argmax
+# Define the optimized custom CUDA kernel for argmax
 argmax_source = """
 #include <torch/extension.h>
 #include <cuda_runtime.h>
 
 template <typename T>
-__global__ void argmax_kernel(const T* input, int64_t* output, 
+__global__ void argmax_kernel(const T* __restrict__ input, int64_t* __restrict__ output, 
                              int outer_size, int dim_size, int inner_size) {
     extern __shared__ char shared_mem[];
     T* sdata = (T*)shared_mem;
     int64_t* sidx = (int64_t*)(shared_mem + dim_size * sizeof(T));
     
-    int outer_idx = blockIdx.x;
-    int inner_idx = blockIdx.y;
+    const int outer_idx = blockIdx.x;
+    const int inner_idx = blockIdx.y;
+    const int tid = threadIdx.x;
     
     const T* current_input = input + outer_idx * dim_size * inner_size + inner_idx;
     int64_t* current_output = output + outer_idx * inner_size + inner_idx;
     
-    // Initialize shared memory
-    int tid = threadIdx.x;
+    // Initialize shared memory with coalesced reads
     if (tid < dim_size) {
         sdata[tid] = current_input[tid * inner_size];
         sidx[tid] = tid;
     }
     __syncthreads();
     
-    // Parallel reduction to find max value and index
-    for (int s = dim_size / 2; s > 0; s >>= 1) {
+    // Optimized parallel reduction with less divergence
+    for (int s = blockDim.x/2; s > 0; s >>= 1) {
         if (tid < s && tid + s < dim_size) {
             if (sdata[tid] < sdata[tid + s] || 
                 (sdata[tid] == sdata[tid + s] && sidx[tid] > sidx[tid + s])) {
@@ -43,7 +44,7 @@ __global__ void argmax_kernel(const T* input, int64_t* output,
         __syncthreads();
     }
     
-    // Write result for this block
+    // Write result with single thread per output
     if (tid == 0) {
         *current_output = sidx[0];
     }
@@ -70,14 +71,12 @@ torch::Tensor argmax_cuda(torch::Tensor input, int64_t dim) {
         inner_size *= input.size(i);
     }
     
-    // Configure kernel launch
+    // Optimized kernel launch configuration
+    const int max_threads = 256;  // Better for T4's 64KB shared memory
+    int threads = std::min(max_threads, static_cast<int>((dim_size + 31) / 32 * 32));
     dim3 blocks(outer_size, inner_size);
-    int threads = 1024;
-    while (threads > dim_size * 2 && threads > 32) {
-        threads >>= 1;
-    }
     
-    size_t shared_mem_size = (dim_size * (sizeof(float) + sizeof(int64_t)));
+    size_t shared_mem_size = dim_size * (sizeof(float) + sizeof(int64_t));
     
     AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "argmax_cuda", [&] {
         argmax_kernel<scalar_t><<<blocks, threads, shared_mem_size>>>(
@@ -105,7 +104,6 @@ argmax_cuda = load_inline(
     extra_cflags=["-O3"],
     extra_ldflags=[""],
 )
-
 
 class ModelNew(nn.Module):
     """

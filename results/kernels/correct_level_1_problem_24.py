@@ -1,3 +1,6 @@
+# runtime: 0.0774
+# basline: 0.0259
+# speedup: 0.33462532299741604
 import torch
 import torch.nn as nn
 from torch.utils.cpp_extension import load_inline
@@ -5,101 +8,127 @@ from torch.utils.cpp_extension import load_inline
 # Define the custom CUDA kernel for LogSoftmax
 log_softmax_source = """
 #include <torch/extension.h>
+#include <cuda.h>
 #include <cuda_runtime.h>
 #include <math.h>
 
-__global__ void log_softmax_kernel(const float* input, float* output, int dim_size, int batch_size, int dim) {
-    // Each block handles one sample in the batch
-    int batch_idx = blockIdx.x;
-    if (batch_idx >= batch_size) return;
+template<typename scalar_t>
+__global__ void log_softmax_forward_kernel(
+    const scalar_t* __restrict__ input,
+    scalar_t* __restrict__ output,
+    const int dim_size,
+    const int inner_size,
+    const int outer_size) {
     
-    extern __shared__ float shared_mem[];
-    float* max_val = shared_mem;
-    float* sum_exp = shared_mem + 1;
+    extern __shared__ char shared_mem[];
+    scalar_t* shared_max = reinterpret_cast<scalar_t*>(shared_mem);
+    scalar_t* shared_sum = shared_max + blockDim.x;
     
-    const float* batch_input = input + batch_idx * dim_size;
-    float* batch_output = output + batch_idx * dim_size;
+    const int outer_idx = blockIdx.x;
+    const int inner_idx = threadIdx.x;
     
-    // Step 1: Find max value in the dimension (for numerical stability)
-    max_val[0] = -INFINITY;
-    for (int i = threadIdx.x; i < dim_size; i += blockDim.x) {
-        float val = batch_input[i];
-        if (val > max_val[0]) {
-            atomicMax((int*)max_val, __float_as_int(val));
+    // Each block processes one outer dimension (batch)
+    const scalar_t* input_row = input + outer_idx * dim_size;
+    scalar_t* output_row = output + outer_idx * dim_size;
+    
+    // Step 1: Find max value for numerical stability
+    scalar_t thread_max = -INFINITY;
+    for (int i = inner_idx; i < dim_size; i += blockDim.x) {
+        thread_max = max(thread_max, input_row[i]);
+    }
+    
+    shared_max[inner_idx] = thread_max;
+    __syncthreads();
+    
+    // Reduction to find max in shared memory
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (inner_idx < stride) {
+            shared_max[inner_idx] = max(shared_max[inner_idx], shared_max[inner_idx + stride]);
         }
+        __syncthreads();
     }
+    
+    scalar_t row_max = shared_max[0];
     __syncthreads();
     
-    // Step 2: Compute sum of exp(x_i - max_val)
-    sum_exp[0] = 0.0f;
-    for (int i = threadIdx.x; i < dim_size; i += blockDim.x) {
-        float val = batch_input[i] - max_val[0];
-        float exp_val = expf(val);
-        atomicAdd(sum_exp, exp_val);
-        batch_output[i] = val;  // Store (x_i - max_val) for later use
+    // Step 2: Compute exp(x_i - max) and sum
+    scalar_t thread_sum = 0;
+    for (int i = inner_idx; i < dim_size; i += blockDim.x) {
+        thread_sum += exp(input_row[i] - row_max);
     }
+    
+    shared_sum[inner_idx] = thread_sum;
     __syncthreads();
     
-    // Step 3: Compute log(exp(x_i - max_val)/sum_exp) = (x_i - max_val) - log(sum_exp)
-    float log_sum_exp = logf(sum_exp[0]);
-    for (int i = threadIdx.x; i < dim_size; i += blockDim.x) {
-        batch_output[i] -= log_sum_exp;
+    // Reduction to find sum in shared memory
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (inner_idx < stride) {
+            shared_sum[inner_idx] += shared_sum[inner_idx + stride];
+        }
+        __syncthreads();
+    }
+    
+    scalar_t row_sum = shared_sum[0];
+    scalar_t log_sum = log(row_sum);
+    
+    // Step 3: Compute final log_softmax: (x_i - max) - log(sum(exp(x_i - max)))
+    for (int i = inner_idx; i < dim_size; i += blockDim.x) {
+        output_row[i] = (input_row[i] - row_max) - log_sum;
     }
 }
 
-torch::Tensor log_softmax_cuda(torch::Tensor input, int dim) {
-    // Input validation
-    TORCH_CHECK(input.dim() == 2, "Input must be 2D tensor");
-    TORCH_CHECK(dim == 0 || dim == 1, "Only dim 0 or 1 supported");
+torch::Tensor log_softmax_cuda(torch::Tensor input, int64_t dim) {
+    auto input_contig = input.contiguous();
+    auto output = torch::empty_like(input_contig);
     
-    auto sizes = input.sizes();
-    int batch_size = sizes[0];
-    int dim_size = sizes[1];
-    
-    if (dim == 0) {
-        // Transpose the operation if dim=0
-        batch_size = sizes[1];
-        dim_size = sizes[0];
+    int dim_size = input_contig.size(dim);
+    int outer_size = 1;
+    for (int i = 0; i < dim; ++i) {
+        outer_size *= input_contig.size(i);
     }
     
-    auto output = torch::empty_like(input);
-    
-    // Configure kernel launch parameters
-    const int threads_per_block = 256;
-    const int shared_mem_size = 2 * sizeof(float);  // For max_val and sum_exp
-    
-    log_softmax_kernel<<<batch_size, threads_per_block, shared_mem_size>>>(
-        input.data_ptr<float>(),
-        output.data_ptr<float>(),
-        dim_size,
-        batch_size,
-        dim
-    );
-    
-    if (dim == 0) {
-        output = output.t();
+    int inner_size = 1;
+    for (int i = dim + 1; i < input_contig.dim(); ++i) {
+        inner_size *= input_contig.size(i);
     }
+    
+    // Use 256 threads per block (good balance for most GPUs)
+    const int threads = 256;
+    const int blocks = outer_size * inner_size;
+    
+    // Shared memory size: 2 * threads * sizeof(float)
+    size_t shared_mem_size = 2 * threads * sizeof(float);
+    
+    AT_DISPATCH_FLOATING_TYPES(input_contig.scalar_type(), "log_softmax_cuda", ([&] {
+        log_softmax_forward_kernel<scalar_t><<<blocks, threads, shared_mem_size>>>(
+            input_contig.data_ptr<scalar_t>(),
+            output.data_ptr<scalar_t>(),
+            dim_size,
+            inner_size,
+            outer_size);
+    }));
     
     return output;
 }
 """
 
-log_softmax_cpp_source = "torch::Tensor log_softmax_cuda(torch::Tensor input, int dim);"
+log_softmax_cpp_source = """
+torch::Tensor log_softmax_cuda(torch::Tensor input, int64_t dim);
+"""
 
 # Compile the inline CUDA code
-log_softmax = load_inline(
+log_softmax_ext = load_inline(
     name="log_softmax",
     cpp_sources=log_softmax_cpp_source,
     cuda_sources=log_softmax_source,
     functions=["log_softmax_cuda"],
     verbose=True,
-    extra_cflags=["-O3"],
-    extra_ldflags=[],
+    extra_cuda_cflags=["-O3"],
 )
 
 class ModelNew(nn.Module):
     """
-    Optimized model that performs LogSoftmax activation using custom CUDA kernel.
+    Optimized version of Model with custom CUDA LogSoftmax implementation.
     """
     def __init__(self, dim: int = 1):
         super(ModelNew, self).__init__()
@@ -115,14 +144,4 @@ class ModelNew(nn.Module):
         Returns:
             torch.Tensor: Output tensor with LogSoftmax applied, same shape as input.
         """
-        return log_softmax.log_softmax_cuda(x, self.dim)
-
-batch_size = 16
-dim = 16384
-
-def get_inputs():
-    x = torch.randn(batch_size, dim).cuda()  # Move to GPU for CUDA kernel
-    return [x]
-
-def get_init_inputs():
-    return []  # No special initialization inputs needed
+        return log_softmax_ext.log_softmax_cuda(x, self.dim)

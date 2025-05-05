@@ -1,5 +1,3 @@
-# Problem Name: 1_Square_matrix_multiplication_
-# Final Result after 3 iterations
 # runtime: 18.5
 # baseline: 4.01
 import torch

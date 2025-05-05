@@ -17,7 +17,7 @@ REPO_TOP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORRECTNESS_SAMPLES = 5
 CORRECTNESS_ITERATIONS = 5
 OPTIMIZATION_SAMPLES = 3
-OPTIMIZATION_ITERATIONS = 8
+OPTIMIZATION_ITERATIONS = 5
 
 
 torch.set_printoptions(precision=4, threshold=10)
@@ -242,6 +242,7 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
 
     id = 1
     for sample in range(max_samples):
+
         shot = recommendations[sample % len(recommendations)][0]
         rec = recommendations[sample % len(recommendations)][1]
         for iteration in range (max_iterations):
@@ -252,7 +253,8 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
                                 gpu_name=config.gpu_name, 
                                 shots=shot, 
                                 recommendation=rec)
-            log_dir = os.path.join(config.logdir, f"optimize_sample_{sample}")
+            sample_log_dir = os.path.join(config.logdir, f"optimize_sample_{sample}_{iteration}")
+            log_dir = os.path.join(sample_log_dir, f"{iteration}")
             os.makedirs(log_dir, exist_ok=True)
 
             new_cuda, iterations_used, new_runtime = gen_for_correctness_single_sample(config=config, 
@@ -260,11 +262,12 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
                                                             low_temp_server = low_temp_server, 
                                                             ref_arch_src = ref_arch_src, 
                                                             problem_name = problem_name, 
-                                                            max_iterations= max_iterations - iteration, 
+                                                            max_iterations= CORRECTNESS_ITERATIONS, 
                                                             optimization_prompt=prompt,
                                                             log_dir = log_dir,
-                                                            start_at = iteration)
-            iteration += iterations_used
+                                                            # start_at = iteration
+                                                            )
+            # iteration += iterations_used
 
             if not new_cuda or new_runtime == -1: 
                 continue
@@ -272,7 +275,7 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
                 best_runtime = new_runtime
                 best_cuda = new_cuda
                 if config.log:
-                    with open(os.path.join(log_dir, f"optimize_result_level_{config.level}_problem_{config.problem_id}_solution_{id}.py"), "w") as f:
+                    with open(os.path.join(sample_log_dir, f"optimize_result_level_{config.level}_problem_{config.problem_id}_solution_{id}.py"), "w") as f:
                         f.write(f"# Problem Name: {problem_name}\n")
                         f.write(f"# optimized kernel after {iteration+1} iterations\n")
                         f.write(f"# runtime: {best_runtime}\n")
@@ -320,7 +323,7 @@ def main(config: EvalConfig):
     assert problem_number == config.problem_id, f"Problem number in filename ({problem_number}) does not match config problem_id ({config.problem_id})"
 
 
-    config.logdir = os.path.join(config.logdir, f"{config.problem_id}")
+    config.logdir = os.path.join(config.logdir, f"{config.level}_{config.problem_id}")
     os.makedirs(config.logdir, exist_ok=True)
     os.makedirs(config.output_dir, exist_ok=True)
     os.makedirs(config.kernels_dir, exist_ok=True)

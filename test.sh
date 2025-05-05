@@ -10,11 +10,11 @@ leaderboard:
 61: 
 74:
 '
-problem_ids=(1 24 40 51 61 74)
+problem_ids=(1 21 24 40 51 61 74)
 
 mkdir -p results/outputs/
 for i in "${problem_ids[@]}"; do
     echo "Running problem_id=$i..."
-    python3 scripts/generate_single_problem.py dataset_src="huggingface" level=1 problem_id=$i > results/outputs/output_1_$i
+    nohup python3 scripts/generate_single_problem.py dataset_src="huggingface" level=1 problem_id=$i > results/outputs/output_1_$i 2>&1 &
 done
 

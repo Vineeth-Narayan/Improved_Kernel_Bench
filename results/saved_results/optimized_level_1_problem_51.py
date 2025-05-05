@@ -1,7 +1,6 @@
-# Problem Name: 51_Argmax_over_a_dimension
-# optimized kernel after 3 iterations
 # runtime: 0.0863
-# baseline: 0.0396
+# basline: 0.0396
+# speedup: 0.458864426419467
 import torch
 import torch.nn as nn
 from torch.utils.cpp_extension import load_inline

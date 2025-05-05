@@ -1,5 +1,6 @@
 # runtime: 18.5
-# baseline: 4.01
+# basline: 4.01
+# speedup: 0.21665441155494802
 import torch
 import torch.nn as nn
 from torch.utils.cpp_extension import load_inline

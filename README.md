@@ -7,9 +7,9 @@ The following are configurable hyperparameters defined at the top of `scripts/ge
 CORRECTNESS_SAMPLES = 5
 CORRECTNESS_ITERATIONS = 5
 OPTIMIZATION_SAMPLES = 3
-OPTIMIZATION_ITERATIONS = 8
+OPTIMIZATION_ITERATIONS = 5
 ```
-Note: with the above configuration, with our experience, expect the optimization to take a long time
+Note: Expect the optimization to take a long time with the above configuration. Lower `OPTIMIZATION_ITERATIONS` to reduce running time.
 
 
 Change the following (line 32-35 in `scripts/generate_single_problem.py`) to match your environment: 
@@ -52,7 +52,17 @@ Prompts and LLM responses will be dumped to:
 ```
 results/eval_logs/
 ```
+## Results
 
+| Level 1 Problem | Problem Description | Speedup after correctness IR | Speedup after optimize IR | KernelBench leaderboard|
+|----------|----------|----------|----------|----------|
+| p1      |  Matmul | 0.17     | 0.22     | 0.17     |
+| p21     |  Sigmoid | 1.01     | 1.18     | 1.00     |
+| p24     |  LogSoftmax| 0.65     | 1.89     | 0.03     |
+| p40     |  LayerNorm | 0.01     | 2.06     | 0.07     |
+| p51     |  Argmax | 0.23     | 0.46     | 0.90     |
+| p61     |  Conv | Failed   | Failed   | Failed   |
+| p74     |  Conv| 1.76     | 1.76     | Failed   |
 
 
 # KernelBench - Can LLMs Write GPU Kernels?

@@ -32,10 +32,10 @@ Generate and evaluate a single sample with iterative compilation fixes
 #       
 
 REPO_TOP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CORRECTNESS_SAMPLES = 3
-CORRECTNESS_ITERATIONS = 10
-OPTIMIZATION_SAMPLES = 4
-OPTIMIZATION_ITERATIONS = 10
+CORRECTNESS_SAMPLES = 5
+CORRECTNESS_ITERATIONS = 5
+OPTIMIZATION_SAMPLES = 3
+OPTIMIZATION_ITERATIONS = 8
 
 
 torch.set_printoptions(precision=4, threshold=10)
@@ -144,6 +144,8 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
 
         # extract code       
         custom_cuda = extract_first_code(custom_cuda, ["python", "cpp"])
+        # if custom_cuda == None:
+        #     custom_cuda = "no_code_output"
         assert custom_cuda is not None, f"Iteration {start_at + iteration + 1}: Custom CUDA code generation failed"
 
         # Log Generated Kernel
@@ -181,7 +183,7 @@ def gen_for_correctness_single_sample(config, high_temp_server, low_temp_server,
         # Log Evaluation Result
         if config.log:
             eval_filename = f"eval_result_level_{config.level}_problem_{config.problem_id}.txt"
-            mode = "w" if ((start_at + iteration) == 0) else "a"
+            mode = "w" if start_at == 0 and iteration == 0 else "a"
             with open(os.path.join(log_dir, eval_filename), mode) as f:
                 f.write(f"Problem Name: {problem_name}\n")
                 f.write(f"Iteration: {iteration + 1 + start_at}\n")
@@ -218,6 +220,7 @@ def gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src,
                                                        log_dir=log_dir)
         if correct_cuda:
             return correct_cuda, runtime
+    return "", None
 
     
         
@@ -275,7 +278,8 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
                                                             problem_name = problem_name, 
                                                             max_iterations= max_iterations - iteration, 
                                                             optimization_prompt=prompt,
-                                                            log_dir = log_dir)
+                                                            log_dir = log_dir,
+                                                            start_at = iteration)
             iteration += iterations_used
 
             if not new_cuda or new_runtime == -1: 
@@ -360,7 +364,7 @@ def main(config: EvalConfig):
     baseline_runtime = baseline_stats["mean"]
     
     correct_cuda, correct_runtime = gen_for_correctness(config, high_temp_server, low_temp_server, ref_arch_src, problem_name)
-    if correct_cuda:
+    if correct_cuda != "":
         with open(os.path.join(config.kernels_dir, f"correct_level_{config.level}_problem_{config.problem_id}.py"), "w") as f:
             f.write(f"# runtime: {correct_runtime}\n")        
             f.write(f"# basline: {baseline_runtime}\n")

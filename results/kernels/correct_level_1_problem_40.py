@@ -1,3 +1,6 @@
+# runtime: 1050.0
+# basline: 8.71
+# speedup: 0.008295238095238097
 import torch
 import torch.nn as nn
 from torch.utils.cpp_extension import load_inline
@@ -5,114 +8,75 @@ from torch.utils.cpp_extension import load_inline
 # Define the custom CUDA kernel for Layer Normalization
 layer_norm_source = """
 #include <torch/extension.h>
+#include <cuda.h>
 #include <cuda_runtime.h>
-#include <cuda_fp16.h>
-#include <algorithm>
 
-template<typename T>
-__device__ __inline__ T warp_reduce_sum(T val) {
-    for (int offset = 16; offset > 0; offset /= 2)
-        val += __shfl_down_sync(0xffffffff, val, offset);
-    return val;
-}
-
-template<typename T>
-__device__ __inline__ T block_reduce_sum(T val) {
-    static __shared__ T shared[32];
-    int lane = threadIdx.x % 32;
-    int wid = threadIdx.x / 32;
-
-    val = warp_reduce_sum(val);
-
-    if (lane == 0) shared[wid] = val;
-    __syncthreads();
-
-    val = (threadIdx.x < blockDim.x / 32) ? shared[lane] : 0;
-    if (wid == 0) val = warp_reduce_sum(val);
-    return val;
-}
-
-template<typename T>
-__global__ void layer_norm_forward_kernel(
-    const T* __restrict__ input,
-    const T* __restrict__ weight,
-    const T* __restrict__ bias,
-    T* __restrict__ output,
-    T* __restrict__ mean,
-    T* __restrict__ rstd,
-    const int num_instances,
-    const int num_features,
-    const int feature_stride,
+template<typename scalar_t>
+__global__ void layer_norm_kernel(
+    const scalar_t* __restrict__ input,
+    scalar_t* __restrict__ output,
+    const scalar_t* __restrict__ gamma,
+    const scalar_t* __restrict__ beta,
+    const int num_elements,
+    const int norm_size,
     const float eps) {
     
-    const int tid = threadIdx.x;
-    const int bid = blockIdx.x;
+    extern __shared__ float s_data[];
+    float* s_mean = s_data;
+    float* s_var = &s_data[blockDim.x];
     
-    if (bid >= num_instances) return;
+    const int tid = threadIdx.x;
+    const int idx = blockIdx.x * blockDim.x + tid;
+    
+    if (idx >= num_elements / norm_size) return;
+    
+    const scalar_t* slice_input = input + idx * norm_size;
+    scalar_t* slice_output = output + idx * norm_size;
     
     // Compute mean
-    T sum = 0.0f;
-    for (int i = tid; i < num_features; i += blockDim.x) {
-        sum += input[bid * feature_stride + i];
+    float sum = 0.0f;
+    for (int i = 0; i < norm_size; ++i) {
+        sum += static_cast<float>(slice_input[i]);
     }
+    float mean = sum / norm_size;
     
-    sum = block_reduce_sum(sum);
-    if (tid == 0) {
-        mean[bid] = sum / num_features;
-    }
-    __syncthreads();
-    
-    // Compute variance (using the mean)
-    T mean_val = mean[bid];
-    T var_sum = 0.0f;
-    for (int i = tid; i < num_features; i += blockDim.x) {
-        T diff = input[bid * feature_stride + i] - mean_val;
+    // Compute variance
+    float var_sum = 0.0f;
+    for (int i = 0; i < norm_size; ++i) {
+        float diff = static_cast<float>(slice_input[i]) - mean;
         var_sum += diff * diff;
     }
+    float inv_std = rsqrtf(var_sum / norm_size + eps);
     
-    var_sum = block_reduce_sum(var_sum);
-    if (tid == 0) {
-        rstd[bid] = rsqrtf(var_sum / num_features + eps);
-    }
-    __syncthreads();
-    
-    // Normalize and apply weight/bias
-    T scale = rstd[bid];
-    for (int i = tid; i < num_features; i += blockDim.x) {
-        output[bid * feature_stride + i] = 
-            (input[bid * feature_stride + i] - mean_val) * scale * weight[i] + bias[i];
+    // Normalize and apply affine transformation
+    for (int i = 0; i < norm_size; ++i) {
+        float normalized = (static_cast<float>(slice_input[i]) - mean) * inv_std;
+        slice_output[i] = static_cast<scalar_t>(normalized * static_cast<float>(gamma[i]) + static_cast<float>(beta[i]));
     }
 }
 
-torch::Tensor layer_norm_forward_cuda(
+torch::Tensor layer_norm_cuda(
     torch::Tensor input,
-    torch::Tensor weight,
-    torch::Tensor bias,
+    torch::Tensor gamma,
+    torch::Tensor beta,
     float eps) {
     
-    auto input_shape = input.sizes();
-    int num_instances = input.numel() / weight.numel();
-    int num_features = weight.numel();
-    int feature_stride = weight.numel();
-    
     auto output = torch::empty_like(input);
-    auto mean = torch::empty({num_instances}, input.options());
-    auto rstd = torch::empty({num_instances}, input.options());
+    const auto norm_size = gamma.numel();
+    const auto num_slices = input.numel() / norm_size;
     
-    const int block_size = 256;
-    dim3 grid(num_instances);
+    const int threads = 256;
+    const int blocks = (num_slices + threads - 1) / threads;
+    const int shared_mem = 2 * threads * sizeof(float);
     
-    AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "layer_norm_forward_cuda", ([&] {
-        layer_norm_forward_kernel<scalar_t><<<grid, block_size>>>(
+    AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "layer_norm_cuda", ([&] {
+        layer_norm_kernel<scalar_t><<<blocks, threads, shared_mem>>>(
             input.data_ptr<scalar_t>(),
-            weight.data_ptr<scalar_t>(),
-            bias.data_ptr<scalar_t>(),
             output.data_ptr<scalar_t>(),
-            mean.data_ptr<scalar_t>(),
-            rstd.data_ptr<scalar_t>(),
-            num_instances,
-            num_features,
-            feature_stride,
+            gamma.data_ptr<scalar_t>(),
+            beta.data_ptr<scalar_t>(),
+            input.numel(),
+            norm_size,
             eps);
     }));
     
@@ -121,41 +85,43 @@ torch::Tensor layer_norm_forward_cuda(
 """
 
 layer_norm_cpp_source = """
-torch::Tensor layer_norm_forward_cuda(
+torch::Tensor layer_norm_cuda(
     torch::Tensor input,
-    torch::Tensor weight,
-    torch::Tensor bias,
+    torch::Tensor gamma,
+    torch::Tensor beta,
     float eps);
 """
 
 # Compile the inline CUDA code
-layer_norm_cuda = load_inline(
-    name="layer_norm_cuda",
+layer_norm_ext = load_inline(
+    name="layer_norm",
     cpp_sources=layer_norm_cpp_source,
     cuda_sources=layer_norm_source,
-    functions=["layer_norm_forward_cuda"],
+    functions=["layer_norm_cuda"],
     verbose=True,
-    extra_cflags=["-O3"],
-    extra_ldflags=["-lcudart"],
+    extra_cuda_cflags=["-O3", "--use_fast_math"],
 )
 
 class ModelNew(nn.Module):
     """
-    Optimized LayerNorm model with custom CUDA kernel.
+    Optimized model that performs Layer Normalization using custom CUDA kernels.
     """
     def __init__(self, normalized_shape: tuple):
         """
-        Initializes the optimized LayerNorm layer.
+        Initializes the LayerNorm layer with custom CUDA implementation.
 
         Args:
             normalized_shape (tuple): Shape of the input tensor to be normalized.
         """
         super(ModelNew, self).__init__()
         self.normalized_shape = normalized_shape
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
         self.eps = 1e-5
-        self.layer_norm_cuda = layer_norm_cuda
+        
+        # Initialize learnable parameters
+        self.gamma = nn.Parameter(torch.ones(normalized_shape))
+        self.beta = nn.Parameter(torch.zeros(normalized_shape))
+        
+        self.layer_norm_cuda = layer_norm_ext.layer_norm_cuda
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -165,32 +131,13 @@ class ModelNew(nn.Module):
             x (torch.Tensor): Input tensor of shape (*, normalized_shape).
 
         Returns:
-            torch::Tensor: Output tensor with Layer Normalization applied, same shape as input.
+            torch::Tensor: Output tensor with Layer Normalization applied.
         """
-        input_shape = x.shape
-        normalized_dims = len(self.normalized_shape)
-        num_features = torch.prod(torch.tensor(self.normalized_shape)).item()
-        
-        # Flatten all dimensions except the normalized ones
-        x = x.contiguous().view(-1, num_features)
-        
-        # Apply custom layer norm
-        x = self.layer_norm_cuda.layer_norm_forward_cuda(x, 
-            self.weight.view(-1), 
-            self.bias.view(-1), 
-            self.eps)
-        
-        # Restore original shape
-        return x.view(input_shape)
-
-batch_size = 16
-features = 64
-dim1 = 256
-dim2 = 256
-
-def get_inputs():
-    x = torch.randn(batch_size, features, dim1, dim2).cuda()
-    return [x]
-
-def get_init_inputs():
-    return [(features, dim1, dim2)]
+        # Reshape gamma and beta to match the normalized dimensions
+        gamma = self.gamma
+        beta = self.beta
+        while gamma.dim() < x.dim():
+            gamma = gamma.unsqueeze(0)
+            beta = beta.unsqueeze(0)
+            
+        return self.layer_norm_cuda(x, gamma, beta, self.eps)

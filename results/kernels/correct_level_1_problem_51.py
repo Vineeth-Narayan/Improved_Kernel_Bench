@@ -1,3 +1,6 @@
+# runtime: 0.204
+# basline: 0.0396
+# speedup: 0.19411764705882356
 import torch
 import torch.nn as nn
 from torch.utils.cpp_extension import load_inline
@@ -7,81 +10,92 @@ argmax_source = """
 #include <torch/extension.h>
 #include <cuda_runtime.h>
 
-template<typename T>
+template <typename T>
 __global__ void argmax_kernel(const T* input, int64_t* output, 
-                             int dim_size, int stride, int outer_size, int inner_size) {
-    int outer_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (outer_idx >= outer_size) return;
-
-    for (int inner_idx = 0; inner_idx < inner_size; ++inner_idx) {
-        const T* dim_start = input + outer_idx * dim_size * inner_size + inner_idx;
-        T max_val = dim_start[0];
-        int max_idx = 0;
-
-        for (int i = 1; i < dim_size; ++i) {
-            if (dim_start[i * inner_size] > max_val) {
-                max_val = dim_start[i * inner_size];
-                max_idx = i;
+                             int outer_size, int dim_size, int inner_size) {
+    extern __shared__ char shared_mem[];
+    T* sdata = (T*)shared_mem;
+    int64_t* sidx = (int64_t*)(shared_mem + dim_size * sizeof(T));
+    
+    int outer_idx = blockIdx.x;
+    int inner_idx = blockIdx.y;
+    
+    const T* current_input = input + outer_idx * dim_size * inner_size + inner_idx;
+    int64_t* current_output = output + outer_idx * inner_size + inner_idx;
+    
+    // Initialize shared memory
+    int tid = threadIdx.x;
+    if (tid < dim_size) {
+        sdata[tid] = current_input[tid * inner_size];
+        sidx[tid] = tid;
+    }
+    __syncthreads();
+    
+    // Parallel reduction to find max value and index
+    for (int s = dim_size / 2; s > 0; s >>= 1) {
+        if (tid < s && tid + s < dim_size) {
+            if (sdata[tid] < sdata[tid + s] || 
+                (sdata[tid] == sdata[tid + s] && sidx[tid] > sidx[tid + s])) {
+                sdata[tid] = sdata[tid + s];
+                sidx[tid] = sidx[tid + s];
             }
         }
-        
-        output[outer_idx * inner_size + inner_idx] = max_idx;
+        __syncthreads();
+    }
+    
+    // Write result for this block
+    if (tid == 0) {
+        *current_output = sidx[0];
     }
 }
 
-torch::Tensor argmax_cuda(torch::Tensor input, int dim) {
-    // Ensure contiguous memory
-    input = input.contiguous();
+torch::Tensor argmax_cuda(torch::Tensor input, int64_t dim) {
+    // Ensure dim is positive
+    dim = dim < 0 ? dim + input.dim() : dim;
     
-    // Get tensor dimensions
-    auto sizes = input.sizes();
-    int dim_size = sizes[dim];
+    auto sizes = input.sizes().vec();
+    int64_t dim_size = sizes[dim];
+    sizes.erase(sizes.begin() + dim);
     
-    // Calculate outer and inner dimensions
+    auto output = torch::empty(sizes, torch::dtype(torch::kLong).device(input.device()));
+    
+    // Calculate dimensions for kernel launch
     int outer_size = 1;
     for (int i = 0; i < dim; ++i) {
-        outer_size *= sizes[i];
+        outer_size *= input.size(i);
     }
     
     int inner_size = 1;
-    for (int i = dim + 1; i < sizes.size(); ++i) {
-        inner_size *= sizes[i];
+    for (int i = dim + 1; i < input.dim(); ++i) {
+        inner_size *= input.size(i);
     }
     
-    // Create output tensor
-    auto options = torch::TensorOptions()
-                    .dtype(torch::kLong)
-                    .device(input.device());
-    auto output = torch::empty({outer_size, inner_size}, options);
+    // Configure kernel launch
+    dim3 blocks(outer_size, inner_size);
+    int threads = 1024;
+    while (threads > dim_size * 2 && threads > 32) {
+        threads >>= 1;
+    }
     
-    // Launch kernel
-    const int block_size = 256;
-    const int num_blocks = (outer_size + block_size - 1) / block_size;
+    size_t shared_mem_size = (dim_size * (sizeof(float) + sizeof(int64_t)));
     
-    AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "argmax_cuda", ([&] {
-        argmax_kernel<scalar_t><<<num_blocks, block_size>>>(
+    AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "argmax_cuda", [&] {
+        argmax_kernel<scalar_t><<<blocks, threads, shared_mem_size>>>(
             input.data_ptr<scalar_t>(),
             output.data_ptr<int64_t>(),
-            dim_size,
-            1,  // stride is now handled via inner_size
             outer_size,
+            dim_size,
             inner_size
         );
-    }));
+    });
     
-    // Reshape output to match input dimensions (minus the reduced dimension)
-    std::vector<int64_t> output_shape;
-    for (int i = 0; i < sizes.size(); ++i) {
-        if (i != dim) output_shape.push_back(sizes[i]);
-    }
-    
-    return output.view(output_shape);
+    return output;
 }
 """
 
-argmax_cpp_source = "torch::Tensor argmax_cuda(torch::Tensor input, int dim);"
+argmax_cpp_source = "torch::Tensor argmax_cuda(torch::Tensor input, int64_t dim);"
 
-# Compile the inline CUDA code
+# Compile the inline CUDA code for argmax
 argmax_cuda = load_inline(
     name="argmax_cuda",
     cpp_sources=argmax_cpp_source,
@@ -89,8 +103,9 @@ argmax_cuda = load_inline(
     functions=["argmax_cuda"],
     verbose=True,
     extra_cflags=["-O3"],
-    extra_ldflags=["-lcudart"],
+    extra_ldflags=[""],
 )
+
 
 class ModelNew(nn.Module):
     """
@@ -109,7 +124,7 @@ class ModelNew(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Applies optimized argmax over the specified dimension to the input tensor.
+        Applies argmax over the specified dimension to the input tensor using custom CUDA kernel.
 
         Args:
             x (torch.Tensor): Input tensor.
@@ -118,14 +133,3 @@ class ModelNew(nn.Module):
             torch.Tensor: Output tensor with argmax applied, with the specified dimension removed.
         """
         return self.argmax_cuda.argmax_cuda(x, self.dim)
-
-batch_size = 16
-dim1 = 256
-dim2 = 256
-
-def get_inputs():
-    x = torch.randn(batch_size, dim1, dim2).cuda()
-    return [x]
-
-def get_init_inputs():
-    return [1]

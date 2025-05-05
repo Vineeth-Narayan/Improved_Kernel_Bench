@@ -53,8 +53,8 @@ Prompts and LLM responses will be dumped to:
 results/eval_logs/
 ```
 ## Results
-
-| Level 1 Problem | Problem Description | Speedup after correctness IR | Speedup after optimize IR | KernelBench leaderboard|
+See `results/saved_results` for generated kernels.
+| Level 1 Problem | Problem Description | Speedup after Correctness IR | Speedup after Optimize IR | KernelBench leaderboard|
 |----------|----------|----------|----------|----------|
 | p1      |  Matmul | 0.17     | 0.22     | 0.17     |
 | p21     |  Sigmoid | 1.01     | 1.18     | 1.00     |
@@ -64,6 +64,8 @@ results/eval_logs/
 | p61     |  Conv | Failed   | Failed   | Failed   |
 | p74     |  Conv| 1.76     | 1.76     | Failed   |
 
+## Sakana Test
+See branch `sakana_test`.
 
 # KernelBench - Can LLMs Write GPU Kernels?
 [blog post](https://scalingintelligence.stanford.edu/blogs/kernelbench/) | [HuggingFace Dataset](https://huggingface.co/datasets/ScalingIntelligence/KernelBench) | [arXiv](https://arxiv.org/html/2502.10517v1)

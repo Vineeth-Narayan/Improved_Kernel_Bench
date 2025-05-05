@@ -253,7 +253,7 @@ def gen_for_optimization(config, initial_cuda, initial_runtime, baseline_runtime
                                 gpu_name=config.gpu_name, 
                                 shots=shot, 
                                 recommendation=rec)
-            sample_log_dir = os.path.join(config.logdir, f"optimize_sample_{sample}_{iteration}")
+            sample_log_dir = os.path.join(config.logdir, f"optimize_sample_{sample}")
             log_dir = os.path.join(sample_log_dir, f"{iteration}")
             os.makedirs(log_dir, exist_ok=True)
 

@@ -9,7 +9,7 @@ CORRECTNESS_ITERATIONS = 5
 OPTIMIZATION_SAMPLES = 3
 OPTIMIZATION_ITERATIONS = 8
 ```
-Note: with the above configuration, with our experience, expect the optimization to take a long time
+Note: with the above configuration, with our experience, expect the optimization to take a long time.
 
 
 Change the following (line 32-35 in `scripts/generate_single_problem.py`) to match your environment: 
@@ -53,6 +53,8 @@ Prompts and LLM responses will be dumped to:
 results/eval_logs/
 ```
 
+## Sakana test
+See directory `sakana_test`
 
 
 # KernelBench - Can LLMs Write GPU Kernels?

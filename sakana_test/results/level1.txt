@@ -1,0 +1,184 @@
+Level 1  problem 12  hybrid_diag_matmul_base        correct. reported speedup=54.400 actual speedup=49.835 cuda_time=0.556  torch_native_time=27.729 
+Level 1  problem 12  optimized_block_size_diag_matm correct. reported speedup=54.400 actual speedup=50.603 cuda_time=0.545  torch_native_time=27.574 
+Level 1  problem 12  flat_no_atomic_diag_matmul_bas correct. reported speedup=54.400 actual speedup=49.494 cuda_time=0.557  torch_native_time=27.564 
+Level 1  problem 15  strided_efficient_triangular_m incorrect. expected max diff=0.00e+00, actual max diff=3.05e+02
+Level 1  problem 15  efficient_mapping_triangular_m incorrect. expected max diff=1.00e-03, actual max diff=4.00e+02
+Level 1  problem 15  efficient_mapping_triangular_m incorrect. expected max diff=1.00e-03, actual max diff=5.33e+02
+Level 1  problem 19  19_ReLU                        correct. reported speedup=1.080  actual speedup=1.113  cuda_time=0.018  torch_native_time=0.021  
+Level 1  problem 19  tuned_blocksize_relu_base      correct. reported speedup=1.080  actual speedup=1.185  cuda_time=0.018  torch_native_time=0.021  
+Level 1  problem 19  adaptive_vectorized_relu_base  correct. reported speedup=1.080  actual speedup=1.122  cuda_time=0.019  torch_native_time=0.021  
+Level 1  problem 20  leaky_relu_shared_memory_base  correct. reported speedup=1.134  actual speedup=1.228  cuda_time=0.020  torch_native_time=0.025  
+Level 1  problem 20  block_size_opt_512_base        correct. reported speedup=1.134  actual speedup=1.168  cuda_time=0.018  torch_native_time=0.022  
+Level 1  problem 20  leaky_relu_optimized_base      correct. reported speedup=1.134  actual speedup=1.089  cuda_time=0.020  torch_native_time=0.022  
+Level 1  problem 21  sigmoid_shared_mem_optimized_b correct. reported speedup=1.109  actual speedup=1.129  cuda_time=0.018  torch_native_time=0.021  
+Level 1  problem 21  21_sigmoid_modular_device_base correct. reported speedup=1.109  actual speedup=1.242  cuda_time=0.019  torch_native_time=0.023  
+Level 1  problem 21  optimized_sigmoid_cuda_base    correct. reported speedup=1.109  actual speedup=0.988  cuda_time=0.020  torch_native_time=0.020  
+Level 1  problem 22  vectorized_tanh_base           correct. reported speedup=1.166  actual speedup=1.103  cuda_time=0.018  torch_native_time=0.020  
+Level 1  problem 22  22_tanh_warp_optimized_base    correct. reported speedup=1.166  actual speedup=1.051  cuda_time=0.019  torch_native_time=0.020  
+Level 1  problem 22  combined_tanh_kernel_edit_1    correct. reported speedup=1.166  actual speedup=1.085  cuda_time=0.019  torch_native_time=0.020  
+Level 1  problem 23  experiment_block_size_softmax_ correct. reported speedup=1.065  actual speedup=0.593  cuda_time=0.056  torch_native_time=0.033  
+Level 1  problem 23  coalesced_memory_access_softma correct. reported speedup=1.065  actual speedup=0.943  cuda_time=0.035  torch_native_time=0.033  
+Level 1  problem 23  reduced_sync_softmax_kernel_ba correct. reported speedup=1.065  actual speedup=0.899  cuda_time=0.037  torch_native_time=0.034  
+Level 1  problem 24  unroll_tuned_logsoftmax_base   correct. reported speedup=1.072  actual speedup=0.867  cuda_time=0.035  torch_native_time=0.030  
+Level 1  problem 24  combined_logsoftmax_base       correct. reported speedup=1.072  actual speedup=0.939  cuda_time=0.032  torch_native_time=0.030  
+Level 1  problem 24  hybrid_logsoftmax_kernel_base  correct. reported speedup=1.072  actual speedup=0.953  cuda_time=0.032  torch_native_time=0.030  
+Level 1  problem 25  25_Swish                       correct. reported speedup=1.562  actual speedup=1.541  cuda_time=0.019  torch_native_time=0.029  
+Level 1  problem 25  optimized_swish_cuda_base      correct. reported speedup=1.562  actual speedup=1.482  cuda_time=0.019  torch_native_time=0.028  
+Level 1  problem 25  coalesced_swish_cuda_base_base correct. reported speedup=1.562  actual speedup=1.549  cuda_time=0.018  torch_native_time=0.028  
+Level 1  problem 26  26_gelu_vectorized_base        correct. reported speedup=1.126  actual speedup=1.107  cuda_time=0.019  torch_native_time=0.021  
+Level 1  problem 26  26_gelu_shared_memory_optimize correct. reported speedup=1.126  actual speedup=0.950  cuda_time=0.021  torch_native_time=0.020  
+Level 1  problem 26  26_gelu_ldg_vec_base           correct. reported speedup=1.126  actual speedup=1.094  cuda_time=0.019  torch_native_time=0.020  
+Level 1  problem 27  selu_vectorized_base_base      correct. reported speedup=1.099  actual speedup=1.089  cuda_time=0.018  torch_native_time=0.020  
+Level 1  problem 27  selu_shared_opt_base           correct. reported speedup=1.099  actual speedup=0.793  cuda_time=0.025  torch_native_time=0.020  
+Level 1  problem 27  27_selu_aligned_ldg_base       correct. reported speedup=1.099  actual speedup=1.101  cuda_time=0.018  torch_native_time=0.020  
+Level 1  problem 28  hardsigmoid_warp_vectorized_ba correct. reported speedup=1.118  actual speedup=1.116  cuda_time=0.019  torch_native_time=0.021  
+Level 1  problem 28  evenly_distributed_hardsigmoid correct. reported speedup=1.118  actual speedup=1.115  cuda_time=0.019  torch_native_time=0.021  
+Level 1  problem 28  hardsigmoid_unrolled_optimized correct. reported speedup=1.118  actual speedup=1.135  cuda_time=0.019  torch_native_time=0.022  
+Level 1  problem 29  softplus_modular_base_base     correct. reported speedup=1.158  actual speedup=1.039  cuda_time=0.020  torch_native_time=0.021  
+Level 1  problem 29  branchless_softplus_edit_1     correct. reported speedup=1.158  actual speedup=1.098  cuda_time=0.019  torch_native_time=0.021  
+Level 1  problem 29  warp_and_alignment_optimized_s correct. reported speedup=1.158  actual speedup=1.071  cuda_time=0.019  torch_native_time=0.021  
+Level 1  problem 30  softsign_optimized_base        correct. reported speedup=2.474  actual speedup=2.158  cuda_time=0.021  torch_native_time=0.045  
+Level 1  problem 30  optimized_softsign_adaptive_ba correct. reported speedup=2.474  actual speedup=2.409  cuda_time=0.019  torch_native_time=0.045  
+Level 1  problem 30  shared_mem_warp_opt_base_base  correct. reported speedup=2.474  actual speedup=2.373  cuda_time=0.018  torch_native_time=0.044  
+Level 1  problem 31  31_elu_vectorized_base         correct. reported speedup=1.136  actual speedup=1.178  cuda_time=0.018  torch_native_time=0.021  
+Level 1  problem 31  31_elu_shared_base             correct. reported speedup=1.136  actual speedup=1.182  cuda_time=0.019  torch_native_time=0.022  
+Level 1  problem 31  vec_shared_elu_base            correct. reported speedup=1.136  actual speedup=1.201  cuda_time=0.018  torch_native_time=0.022  
+Level 1  problem 32  32_HardTanh                    correct. reported speedup=1.061  actual speedup=1.320  cuda_time=0.019  torch_native_time=0.025  
+Level 1  problem 32  32_hardtanh_vectorized_ldg_bas correct. reported speedup=1.061  actual speedup=1.332  cuda_time=0.019  torch_native_time=0.025  
+Level 1  problem 32  32_hardtanh_tuned_blocksize_ba correct. reported speedup=1.061  actual speedup=1.348  cuda_time=0.019  torch_native_time=0.025  
+Level 1  problem 34  34_InstNorm_shared_memory_opt_ incompatible function arguments. Skipped
+Level 1  problem 34  34_InstNorm_shared_memory_opt_ incompatible function arguments. Skipped
+Level 1  problem 34  34_instnorm_modular_base       incompatible function arguments. Skipped
+Level 1  problem 35  pipelined_stream_groupnorm_opt incompatible function arguments. Skipped
+Level 1  problem 35  pipelined_stream_groupnorm_bas incompatible function arguments. Skipped
+Level 1  problem 35  pipelined_stream_groupnorm_bas incompatible function arguments. Skipped
+Level 1  problem 36  36_rmsnorm_even_workload_base  incompatible function arguments. Skipped
+Level 1  problem 36  36_rmsnorm_optimized_indexing_ incompatible function arguments. Skipped
+Level 1  problem 36  36_rmsnorm_optimized_indexing_ incompatible function arguments. Skipped
+Level 1  problem 37  modular_frobenius_norm_edit_1  correct. reported speedup=1.645  actual speedup=1.519  cuda_time=2.117  torch_native_time=3.216  
+Level 1  problem 37  unroll_frobenius_norm_base     correct. reported speedup=1.557  actual speedup=1.234  cuda_time=2.616  torch_native_time=3.227  
+Level 1  problem 37  balanced_frobenius_norm_base   correct. reported speedup=1.471  actual speedup=1.306  cuda_time=2.486  torch_native_time=3.248  
+Level 1  problem 38  l1norm_hybrid_reduction_base   correct. reported speedup=2.042  actual speedup=1.940  cuda_time=0.024  torch_native_time=0.046  
+Level 1  problem 38  l1norm_shared_memory_optimizat correct. reported speedup=2.042  actual speedup=2.081  cuda_time=0.024  torch_native_time=0.050  
+Level 1  problem 38  l1norm_aligned_ldg_base        correct. reported speedup=1.815  actual speedup=2.026  cuda_time=0.022  torch_native_time=0.045  
+Level 1  problem 39  l2norm_strided_optimized_base_ correct. reported speedup=1.892  actual speedup=1.638  cuda_time=0.024  torch_native_time=0.039  
+Level 1  problem 39  l2_norm_combined_base          correct. reported speedup=1.548  actual speedup=1.083  cuda_time=0.036  torch_native_time=0.039  
+Level 1  problem 39  l2_norm_unroll_optimized_base  correct. reported speedup=1.419  actual speedup=1.059  cuda_time=0.036  torch_native_time=0.038  
+Level 1  problem 40  optimized_layernorm_streamed_b incompatible function arguments. Skipped
+Level 1  problem 40  layernorm_unrolled_base_base   incompatible function arguments. Skipped
+Level 1  problem 40  layernorm_forward_optimized_ba incompatible function arguments. Skipped
+Level 1  problem 41  41_Max_Pooling_1D              correct. reported speedup=1.183  actual speedup=1.995  cuda_time=0.019  torch_native_time=0.037  
+Level 1  problem 41  max_pool1d_optimized_grid_base correct. reported speedup=1.183  actual speedup=2.109  cuda_time=0.018  torch_native_time=0.038  
+Level 1  problem 41  max_pool1d_shared_opt_base     correct. reported speedup=1.183  actual speedup=2.005  cuda_time=0.018  torch_native_time=0.037  
+Level 1  problem 42  tuned_block_size_maxpool2d_bas correct. reported speedup=1.434  actual speedup=1.847  cuda_time=0.182  torch_native_time=0.336  
+Level 1  problem 42  warp_divergence_optimized_unro correct. reported speedup=1.434  actual speedup=1.992  cuda_time=0.169  torch_native_time=0.337  
+Level 1  problem 42  base_unrolled_combo_base       correct. reported speedup=1.434  actual speedup=1.996  cuda_time=0.169  torch_native_time=0.337  
+Level 1  problem 43  maxpool3d_unrolled_base_base   correct. reported speedup=1.909  actual speedup=1.468  cuda_time=2.565  torch_native_time=3.767  
+Level 1  problem 43  divergence_free_maxpool3d_base correct. reported speedup=1.591  actual speedup=1.301  cuda_time=2.917  torch_native_time=3.793  
+Level 1  problem 43  max_pool3d_manual_unroll_full_ correct. reported speedup=1.545  actual speedup=1.250  cuda_time=3.021  torch_native_time=3.775  
+Level 1  problem 44  44_Average_Pooling_1D          correct. reported speedup=1.238  actual speedup=1.660  cuda_time=0.019  torch_native_time=0.032  
+Level 1  problem 44  optimized_avg_pool1d_base      correct. reported speedup=1.238  actual speedup=1.786  cuda_time=0.018  torch_native_time=0.032  
+Level 1  problem 44  vectorized_4x_base             correct. reported speedup=1.238  actual speedup=1.832  cuda_time=0.018  torch_native_time=0.032  
+Level 1  problem 45  manual_unroll_avg_pool2d_base  correct. reported speedup=1.935  actual speedup=1.344  cuda_time=1.165  torch_native_time=1.567  
+Level 1  problem 45  efficient_avg_pool_base        correct. reported speedup=1.935  actual speedup=1.457  cuda_time=1.166  torch_native_time=1.698  
+Level 1  problem 45  grid_stride_manual_unroll_base correct. reported speedup=1.935  actual speedup=1.192  cuda_time=1.128  torch_native_time=1.345  
+Level 1  problem 46  avgpool3d_combo_base           correct. reported speedup=1.959  actual speedup=1.060  cuda_time=3.295  torch_native_time=3.491  
+Level 1  problem 46  avgpool3d_combined_base        correct. reported speedup=1.959  actual speedup=1.213  cuda_time=2.879  torch_native_time=3.494  
+Level 1  problem 46  avgpool3d_combo_edit_1         correct. reported speedup=1.959  actual speedup=1.120  cuda_time=3.094  torch_native_time=3.464  
+Level 1  problem 47  unroll_warp_level_sum_reductio correct. reported speedup=1.471  actual speedup=0.314  cuda_time=0.106  torch_native_time=0.033  
+Level 1  problem 47  adaptive_blocksize_warp_sum_re correct. reported speedup=1.471  actual speedup=0.290  cuda_time=0.112  torch_native_time=0.033  
+Level 1  problem 47  modular_warp_sum_reduction_bas correct. reported speedup=1.471  actual speedup=0.307  cuda_time=0.106  torch_native_time=0.032  
+Level 1  problem 48  evenly_distributed_mean_base   correct. reported speedup=1.760  actual speedup=0.823  cuda_time=0.041  torch_native_time=0.034  
+Level 1  problem 48  warp_reduce_shfl_base_base     correct. reported speedup=1.320  actual speedup=0.322  cuda_time=0.108  torch_native_time=0.035  
+Level 1  problem 48  warp_reduce_shfl_base_edit_1   correct. reported speedup=1.320  actual speedup=0.321  cuda_time=0.107  torch_native_time=0.034  
+Level 1  problem 49  distributed_max_reduction_base correct. reported speedup=1.501  actual speedup=0.336  cuda_time=0.201  torch_native_time=0.067  
+Level 1  problem 49  adaptive_max_reduce_base       correct. reported speedup=1.501  actual speedup=0.338  cuda_time=0.200  torch_native_time=0.067  
+Level 1  problem 49  optimal_blocksize_max_reduce_e correct. reported speedup=1.501  actual speedup=0.344  cuda_time=0.196  torch_native_time=0.067  
+Level 1  problem 50  block_size_optimized_reduction incorrect. expected max diff=0.00e+00, actual max diff=1.78e-02
+Level 1  problem 50  block_size_optimized_reduction correct. reported speedup=2.692  actual speedup=1.976  cuda_time=0.017  torch_native_time=0.034  
+Level 1  problem 50  combined_optimized_prod_reduce correct. reported speedup=2.308  actual speedup=1.949  cuda_time=0.017  torch_native_time=0.033  
+Level 1  problem 51  warp_argmax_nosm_edit_1        correct. reported speedup=1.854  actual speedup=0.607  cuda_time=0.107  torch_native_time=0.065  
+Level 1  problem 51  optimized_argmax_combination_b correct. reported speedup=1.721  actual speedup=0.492  cuda_time=0.132  torch_native_time=0.065  
+Level 1  problem 51  efficient_argmax_base          correct. reported speedup=1.721  actual speedup=0.517  cuda_time=0.125  torch_native_time=0.065  
+Level 1  problem 52  52_argmin_tuned_blocks_base_ba correct. reported speedup=1.727  actual speedup=0.513  cuda_time=0.128  torch_native_time=0.066  
+Level 1  problem 52  argmin_parallel_tuned_2_edit_1 correct. reported speedup=1.727  actual speedup=0.455  cuda_time=0.142  torch_native_time=0.065  
+Level 1  problem 52  52_argmin_ldg_aligned_base     correct. reported speedup=1.612  actual speedup=0.392  cuda_time=0.165  torch_native_time=0.065  
+Level 1  problem 53  min_reduction_warp_base_base   correct. reported speedup=2.187  actual speedup=0.641  cuda_time=0.106  torch_native_time=0.068  
+Level 1  problem 53  min_reduction_optimized_memory correct. reported speedup=2.187  actual speedup=0.636  cuda_time=0.105  torch_native_time=0.067  
+Level 1  problem 53  min_reduce_optimized_base      correct. reported speedup=2.187  actual speedup=0.639  cuda_time=0.106  torch_native_time=0.068  
+Level 1  problem 57  warp_optimized_conv_transpose2 incompatible function arguments. Skipped
+Level 1  problem 57  block_tuned_conv_transpose2d_b incompatible function arguments. Skipped
+Level 1  problem 57  block_size_experiment_conv_tra incompatible function arguments. Skipped
+Level 1  problem 58  58_conv_transposed_3D__asymmet incompatible function arguments. Skipped
+Level 1  problem 62  62_conv_standard_2D__square_in incompatible function arguments. Skipped
+Level 1  problem 64  64_conv_transposed_1D          incompatible function arguments. Skipped
+Level 1  problem 64  modular_64_conv_transposed_1D_ incompatible function arguments. Skipped
+Level 1  problem 64  modular_64_conv_transposed_1D_ incompatible function arguments. Skipped
+Level 1  problem 67  aligned_ldg_conv1d_base        incompatible function arguments. Skipped
+Level 1  problem 67  vectorized_conv1d_base_base_ba incompatible function arguments. Skipped
+Level 1  problem 67  vectorized_shared_base         incompatible function arguments. Skipped
+Level 1  problem 69  69_conv_transposed_2D__asymmet incompatible function arguments. Skipped
+Level 1  problem 72  minimize_warp_divergence_base  incompatible function arguments. Skipped
+Level 1  problem 72  minimize_warp_divergence_edit_ incompatible function arguments. Skipped
+Level 1  problem 72  unroll_loops_for_3D_transposed incompatible function arguments. Skipped
+Level 1  problem 74  shared_mem_tiled_74_conv_trans incompatible function arguments. Skipped
+Level 1  problem 74  shared_mem_tiled_74_conv_trans incompatible function arguments. Skipped
+Level 1  problem 74  warp_divergence_optimized_74_c incompatible function arguments. Skipped
+Level 1  problem 75  conv_transposed_2d_tiled_share incompatible function arguments. Skipped
+Level 1  problem 75  optimized_conv_transpose2d_bas incompatible function arguments. Skipped
+Level 1  problem 76  conv1d_warp_uniform_base_base  incompatible function arguments. Skipped
+Level 1  problem 76  optimized_conv1d_base          incompatible function arguments. Skipped
+Level 1  problem 76  modular_conv1d_base            incompatible function arguments. Skipped
+Level 1  problem 78  conv_trans_tuned_blocks_base_b incompatible function arguments. Skipped
+Level 1  problem 78  78_conv_transposed_2D_asymmetr incompatible function arguments. Skipped
+Level 1  problem 78  conv_trans_shared_warp_reducti incompatible function arguments. Skipped
+Level 1  problem 82  manual_unroll_depthwise_2d_ker incompatible function arguments. Skipped
+Level 1  problem 82  manual_unroll_depthwise_2d_ker incompatible function arguments. Skipped
+Level 1  problem 82  warp_divergence_minimized_dept incompatible function arguments. Skipped
+Level 1  problem 83  hybrid_tiled_warp_depthwise_co incompatible function arguments. Skipped
+Level 1  problem 83  83_conv_depthwise_2d_tile_base incompatible function arguments. Skipped
+Level 1  problem 83  83_conv_depthwise_2d_unroll_lo incompatible function arguments. Skipped
+Level 1  problem 84  84_conv_dw2d_unroll_gridstride incompatible function arguments. Skipped
+Level 1  problem 84  84_conv_dw2d_modular_devicefun incompatible function arguments. Skipped
+Level 1  problem 84  84_conv_dw2d_tuned_blocksize_b incompatible function arguments. Skipped
+Level 1  problem 85  combined_conv_vectorized_base  incompatible function arguments. Skipped
+Level 1  problem 85  combined_conv_vectorized_edit_ incompatible function arguments. Skipped
+Level 1  problem 85  coalesced_depthwise_conv2d_bas incompatible function arguments. Skipped  
+Level 1  problem 88  88_MinGPTNewGelu_shared_base_b correct. reported speedup=5.716  actual speedup=8.692  cuda_time=0.138  torch_native_time=1.200  
+Level 1  problem 88  88_mingptnewgelu_shared_tile_b correct. reported speedup=5.716  actual speedup=8.739  cuda_time=0.138  torch_native_time=1.205  
+Level 1  problem 88  gelu_kernel_optimized_base     correct. reported speedup=5.716  actual speedup=8.718  cuda_time=0.138  torch_native_time=1.203  
+Level 1  problem 89  aligned_cumsum_ldg_base        correct. reported speedup=2.214  actual speedup=0.705  cuda_time=0.118  torch_native_time=0.083  
+Level 1  problem 89  aligned_cumsum_ldg_edit_1      correct. reported speedup=2.214  actual speedup=0.741  cuda_time=0.118  torch_native_time=0.088  
+Level 1  problem 89  tile_scan_cumsum_base          correct. reported speedup=2.214  actual speedup=0.695  cuda_time=0.120  torch_native_time=0.083  
+Level 1  problem 90  cumprod_min_sync_base_base     correct. reported speedup=3.088  actual speedup=1.065  cuda_time=0.077  torch_native_time=0.082  
+Level 1  problem 90  cumprod_optimized_block_size_b correct. reported speedup=2.206  actual speedup=0.729  cuda_time=0.113  torch_native_time=0.083  
+Level 1  problem 90  parallel_cumprod_two_pass_base correct. reported speedup=2.059  actual speedup=0.716  cuda_time=0.121  torch_native_time=0.087  
+Level 1  problem 91  91_cumsum_reverse              correct. reported speedup=1.012  actual speedup=0.984  cuda_time=0.136  torch_native_time=0.134  
+Level 1  problem 91  aligned_ldg_reverse_cumsum_bas correct. reported speedup=1.012  actual speedup=0.980  cuda_time=0.136  torch_native_time=0.133  
+Level 1  problem 91  cumsum_reverse_index_edit_1    correct. reported speedup=1.012  actual speedup=0.986  cuda_time=0.134  torch_native_time=0.132  
+Level 1  problem 93  modular_hybrid_masked_cumsum_b incorrect. expected max diff=0.00e+00, actual max diff=4.74e-01
+Level 1  problem 93  shared_memory_optimized_masked incorrect. expected max diff=0.00e+00, actual max diff=6.67e+00
+Level 1  problem 93  hybrid_masked_cumsum_base      correct. reported speedup=1.277  actual speedup=1.242  cuda_time=0.098  torch_native_time=0.122  
+Level 1  problem 94  optimized_thread_indexing_base correct. reported speedup=1.034  actual speedup=0.543  cuda_time=0.130  torch_native_time=0.070  
+Level 1  problem 94  efficient_mse_base             correct. reported speedup=1.034  actual speedup=1.048  cuda_time=0.110  torch_native_time=0.116  
+Level 1  problem 94  coalesced_shfl_mse_base        correct. reported speedup=1.034  actual speedup=0.609  cuda_time=0.115  torch_native_time=0.070  
+Level 1  problem 95  95_CrossEntropyLoss            correct. reported speedup=8.973  actual speedup=4.791  cuda_time=0.030  torch_native_time=0.145  
+Level 1  problem 95  memory_coalescing_base         correct. reported speedup=8.973  actual speedup=4.566  cuda_time=0.032  torch_native_time=0.145  
+Level 1  problem 95  block_size_experimentation_bas correct. reported speedup=8.973  actual speedup=4.949  cuda_time=0.030  torch_native_time=0.147  
+Level 1  problem 96  vectorized_warp_base           correct. reported speedup=1.616  actual speedup=2.058  cuda_time=0.032  torch_native_time=0.067  
+Level 1  problem 96  vectorized_ldg_block_reduce_ba correct. reported speedup=1.616  actual speedup=2.109  cuda_time=0.032  torch_native_time=0.068  
+Level 1  problem 96  warp_optimized_reduction_base_ correct. reported speedup=1.616  actual speedup=2.488  cuda_time=0.027  torch_native_time=0.066  
+Level 1  problem 97  blocksize_tuning_cosine_loss_b correct. reported speedup=7.643  actual speedup=7.021  cuda_time=0.029  torch_native_time=0.200  
+Level 1  problem 97  adaptive_block_cosine_loss_bas correct. reported speedup=6.948  actual speedup=5.845  cuda_time=0.034  torch_native_time=0.199  
+Level 1  problem 97  block_tuned_cosine_loss_base_b correct. reported speedup=6.948  actual speedup=6.756  cuda_time=0.030  torch_native_time=0.201  
+Level 1  problem 98  optimized_kl_div_cuda_base     correct. reported speedup=2.830  actual speedup=3.806  cuda_time=0.029  torch_native_time=0.112  
+Level 1  problem 98  optimized_kl_div_kernel_base   correct. reported speedup=2.595  actual speedup=3.200  cuda_time=0.035  torch_native_time=0.112  
+Level 1  problem 98  98_KLDivLoss_optimal_reduce_ed incorrect. expected max diff=1.00e-03, actual max diff=3.71e-01
+Level 1  problem 99  warp_shfl_tripletloss_base     correct. reported speedup=3.873  actual speedup=3.889  cuda_time=0.043  torch_native_time=0.168  
+Level 1  problem 99  warp_shfl_tripletloss_edit_1   correct. reported speedup=3.873  actual speedup=3.747  cuda_time=0.045  torch_native_time=0.168  
+Level 1  problem 99  warp_optimized_tripletloss_edi correct. reported speedup=3.873  actual speedup=3.895  cuda_time=0.043  torch_native_time=0.168  
+Level 1  problem 100 100_HingeLoss                  incorrect. expected max diff=1.03e-01, actual max diff=6.20e-02
+Level 1  problem 100 100_HingeLoss_memory_optimized incorrect. expected max diff=8.00e-02, actual max diff=1.04e-01
+Level 1  problem 100 modular_hinge_loss_base        incorrect. expected max diff=1.50e-02, actual max diff=1.07e-01
+
+Level 1 result: failed 10/132 top performing kernels. 

@@ -1,5 +1,10 @@
 # Improved KernelBench
 
+## Design Principles
+1. Combining parallel temperature sampling with iterative refinement: for every parallel sample, do iterative refinement. 
+2. Separate correctness and performance into two distinct stages, each with different prompting techniques, verification and feedback schema
+3. Thoughtful prompt engineering include CoT and few-shot examples
+   
 ## Configuration
 
 The following are configurable hyperparameters defined at the top of `scripts/generate_single_problem.py`:
@@ -69,13 +74,13 @@ Test problems are selected to cover a diverse set of operations including Matmal
 For the majority of the problems, we are able to exceed the best speedup on KernelBench leaderboard, with the highest speedup on problem 24 and 40, gaining a 1.89x and 2.06x speedup separately, while the best speedup on KernelBench leaderboard is 0.03x and 0.07x separately. We have also observed that iterative refinement allows the LLM to generate a compiled and correct kernel more easily than results reported on leaderboard. 
 
 ## Limitations and Future Work
-- **Insufficient objective with wall-clock runtime:** Wall-clock runtime alone as an objective function lacks sophistication and overlooks other metrics such as code minimalism, which might affect future iterative optimization on this piece of code. Wall-clock runtime could be overly sensitive to noise even with 100 performance trials, especially when the runtime values are very small, in which case a very small variance causes a huge change in speedup. 
-
 - **Parallelization:** The scale of the maximum samples and iterations allowed is a significant factor that affects the result of generation. To support larger scale, we must draw samples and evaluate them in parallel with LLM ensembles. 
 
-- **Correctness and performance feedback:** It is difficult to give informative yet still concise correctness and performance feedback. We currently give only max difference as correctness feedback . An alternative is to give the full resulting matrix and reference matrix as correctness feedback, but the size could be massive and the values still uninformative. A human programmer may debug for correctness with selected input, which is another alternative that we may use. 
+- **Correctness and performance feedback:** It is difficult to give informative yet concise correctness and performance feedback. We currently give only max difference as correctness feedback. An alternative is to give the full resulting matrix and reference matrix as correctness feedback, but the size could be massive and the values still uninformative. A human programmer may debug for correctness with selected input, which is another alternative that we may use. 
 
 - **few-shot examples for hard problems:** While many techniques have been explored to optimize generated kernels, there aren't many proposed techniques to improve generating for correctness, except possibly giving few-shot examples. As we observed that LLMs struggle to produce correct code for convolution, a future work could be including few-shot examples for those hard problems.
+
+- **Unfair objective with wall-clock runtime:** Wall-clock runtime alone as an objective function lacks sophistication and overlooks other metrics such as code minimalism, which might affect future iterative optimization on this piece of code. Wall-clock runtime could be overly sensitive to noise even with 100 performance trials. Especially when a problem are expected to take a very short time, a very small variance in measured time causes a huge change in speedup. 
 
 
 ## Sakana Test
